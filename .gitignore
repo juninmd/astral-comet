@@ -1,0 +1,6 @@
+node_modules
+dist
+.env
+.firefox-profile
+web-ext-artifacts
+*.log

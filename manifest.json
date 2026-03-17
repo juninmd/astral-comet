@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Leilão FIPE Helper",
+  "version": "1.0.0",
+  "description": "Exibe o valor FIPE e lucro calculado no site Freitas Leiloeiro.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://www.freitasleiloeiro.com.br/*",
+    "https://parallelum.com.br/*",
+    "https://brasilapi.com.br/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.freitasleiloeiro.com.br/Leiloes/Lotes*"],
+      "js": ["dist/content_script.js"],
+      "css": ["src/styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "leilao-fipe-helper@antigravity.ia"
+    }
+  }
+}

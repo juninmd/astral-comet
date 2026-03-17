@@ -6,7 +6,8 @@ export class FipeService {
   static async getPrice(brand: string, model: string, year: number): Promise<FipeVehicle | null> {
     try {
       // 1. Get brands to find the brand ID
-      const brandsResponse = await fetch(`${this.BASE_URL}/marcas/carros`);
+      const brandsResponse = await fetch(`${this.BASE_URL}/marcas/v1/carros`);
+      if (!brandsResponse.ok) return null;
       const brands: any[] = await brandsResponse.json();
       
       const brandObj = brands.find(b => 
@@ -17,7 +18,8 @@ export class FipeService {
       if (!brandObj) return null;
 
       // 2. Get models for that brand
-      const modelsResponse = await fetch(`${this.BASE_URL}/modelos/carros/${brandObj.valor}`);
+      const modelsResponse = await fetch(`${this.BASE_URL}/modelos/v1/carros/${brandObj.valor}`);
+      if (!modelsResponse.ok) return null;
       const modelsData: any = await modelsResponse.json();
       const models: any[] = modelsData.modelos || [];
 
@@ -30,7 +32,8 @@ export class FipeService {
       if (!modelObj) return null;
 
       // 3. Get prices for the specific model and year
-      const pricesResponse = await fetch(`${this.BASE_URL}/preco/carros/${modelObj.valor}`);
+      const pricesResponse = await fetch(`${this.BASE_URL}/preco/v1/carros/${modelObj.valor}`);
+      if (!pricesResponse.ok) return null;
       const prices: FipeVehicle[] = await pricesResponse.json();
 
       // Find the specific year

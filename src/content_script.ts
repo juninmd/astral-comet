@@ -27,10 +27,15 @@ async function processLot(card: HTMLElement) {
   // Parse bid: "R$ 18.000,00"
   const bidValue = parseFloat(bidText.replace(/[^\d,]/g, '').replace(',', '.'));
 
-  if (!brand || !model || isNaN(modelYear)) return;
+  console.log(`[FipeHelper] Processing: ${brand}/${model} (${modelYear}) at ${bidValue}`);
 
   const fipeData = await FipeService.getPrice(brand, model, modelYear);
-  if (!fipeData) return;
+  console.log(`[FipeHelper] FIPE Data for ${brand}/${model}:`, fipeData);
+
+  if (!fipeData) {
+    console.warn(`[FipeHelper] No FIPE data found for: ${brand} ${model} ${modelYear}`);
+    return;
+  }
 
   const fipeValue = parseFloat(fipeData.valor.replace(/[^\d,]/g, '').replace(',', '.'));
   

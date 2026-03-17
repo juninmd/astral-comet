@@ -1,7 +1,7 @@
 import { FipeVehicle } from './types';
 
 export class FipeService {
-  private static BASE_URL = 'https://brasilapi.com.br/api/fipe/v1';
+  private static BASE_URL = 'https://brasilapi.com.br/api/fipe';
 
   static async getPrice(brand: string, model: string, year: number): Promise<FipeVehicle | null> {
     try {
@@ -17,11 +17,10 @@ export class FipeService {
 
       if (!brandObj) return null;
 
-      // 2. Get models for that brand
-      const modelsResponse = await fetch(`${this.BASE_URL}/modelos/v1/carros/${brandObj.valor}`);
+      // 2. Get vehicles (models) for that brand
+      const modelsResponse = await fetch(`${this.BASE_URL}/veiculos/v1/carros/${brandObj.valor}`);
       if (!modelsResponse.ok) return null;
-      const modelsData: any = await modelsResponse.json();
-      const models: any[] = modelsData.modelos || [];
+      const models: any[] = await modelsResponse.json();
 
       // Simple fuzzy match for the model
       const modelObj = models.find(m => 
@@ -31,8 +30,8 @@ export class FipeService {
 
       if (!modelObj) return null;
 
-      // 3. Get prices for the specific model and year
-      const pricesResponse = await fetch(`${this.BASE_URL}/preco/v1/carros/${modelObj.valor}`);
+      // 3. Get prices for the specific Fipe code
+      const pricesResponse = await fetch(`${this.BASE_URL}/preco/v1/${modelObj.valor}`);
       if (!pricesResponse.ok) return null;
       const prices: FipeVehicle[] = await pricesResponse.json();
 

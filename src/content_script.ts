@@ -39,16 +39,20 @@ async function processLot(card: HTMLElement) {
 }
 
 function calculateProfit(fipe: number, bid: number): CalculationResult {
-  const fees = bid * 0.04;
+  const commission = bid * 0.05;
+  const adminFee = 1900;
+  const atpvFee = 40;
   const towing = 1500;
-  const totalCost = bid + fees + towing;
+  const totalCost = bid + commission + adminFee + atpvFee + towing;
   const profit = fipe - totalCost;
   const profitPercentage = (profit / totalCost) * 100;
 
   return {
     fipeValue: fipe,
     bidValue: bid,
-    fees,
+    commission,
+    adminFee,
+    atpvFee,
     towing,
     totalCost,
     profit,
@@ -69,11 +73,19 @@ function injectResults(target: Element, results: CalculationResult) {
       <span class="fipe-value">${formatter.format(results.fipeValue)}</span>
     </div>
     <div class="fipe-row">
-      <span class="fipe-label">Taxas (4%):</span>
-      <span class="fipe-value">${formatter.format(results.fees)}</span>
+      <span class="fipe-label">Comissão (5%):</span>
+      <span class="fipe-value">${formatter.format(results.commission)}</span>
     </div>
     <div class="fipe-row">
-      <span class="fipe-label">Guincho:</span>
+      <span class="fipe-label">Adm/Org/Dep:</span>
+      <span class="fipe-value">${formatter.format(results.adminFee)}</span>
+    </div>
+    <div class="fipe-row">
+      <span class="fipe-label">ATPV-e:</span>
+      <span class="fipe-value">${formatter.format(results.atpvFee)}</span>
+    </div>
+    <div class="fipe-row">
+      <span class="fipe-label">Guincho (Est.):</span>
       <span class="fipe-value">${formatter.format(results.towing)}</span>
     </div>
     <div class="fipe-row">

@@ -14,7 +14,9 @@ export interface FipeVehicle {
 export interface CalculationResult {
   fipeValue: number;
   bidValue: number;
-  fees: number;
+  commission: number;
+  adminFee: number;
+  atpvFee: number;
   towing: number;
   totalCost: number;
   profit: number;

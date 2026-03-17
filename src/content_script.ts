@@ -27,20 +27,65 @@ async function processLot(card: HTMLElement) {
   // Parse bid: "R$ 18.000,00"
   const bidValue = parseFloat(bidText.replace(/[^\d,]/g, '').replace(',', '.'));
 
-  console.log(`[FipeHelper] Processing: ${brand}/${model} (${modelYear}) at ${bidValue}`);
+  // Inject loading state
+  let statusContainer = card.querySelector('.fipe-helper-container') as HTMLElement;
+  if (!statusContainer) {
+    statusContainer = document.createElement('div');
+    statusContainer.className = 'fipe-helper-container';
+    statusContainer.innerHTML = '<div class="fipe-row"><span class="fipe-label">Consultando FIPE...</span></div>';
+    labelElement.parentElement?.appendChild(statusContainer);
+  }
 
   const fipeData = await FipeService.getPrice(brand, model, modelYear);
-  console.log(`[FipeHelper] FIPE Data for ${brand}/${model}:`, fipeData);
-
+  
   if (!fipeData) {
-    console.warn(`[FipeHelper] No FIPE data found for: ${brand} ${model} ${modelYear}`);
+    statusContainer.innerHTML = '<div class="fipe-row"><span class="fipe-label" style="color: #ff5252">FIPE não encontrada</span></div>';
     return;
   }
 
   const fipeValue = parseFloat(fipeData.valor.replace(/[^\d,]/g, '').replace(',', '.'));
-  
   const results = calculateProfit(fipeValue, bidValue);
-  injectResults(labelElement, results);
+  
+  updateResults(statusContainer, results);
+}
+
+function updateResults(container: HTMLElement, results: CalculationResult) {
+  const formatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  const isPositive = results.profit > 0;
+
+  container.innerHTML = `
+    <div class="fipe-row">
+      <span class="fipe-label">Valor FIPE:</span>
+      <span class="fipe-value">${formatter.format(results.fipeValue)}</span>
+    </div>
+    <div class="fipe-row">
+      <span class="fipe-label">Comissão (5%):</span>
+      <span class="fipe-value">${formatter.format(results.commission)}</span>
+    </div>
+    <div class="fipe-row">
+      <span class="fipe-label">Adm/Org/Dep:</span>
+      <span class="fipe-value">${formatter.format(results.adminFee)}</span>
+    </div>
+    <div class="fipe-row">
+      <span class="fipe-label">ATPV-e:</span>
+      <span class="fipe-value">${formatter.format(results.atpvFee)}</span>
+    </div>
+    <div class="fipe-row">
+      <span class="fipe-label">Guincho (Est.):</span>
+      <span class="fipe-value">${formatter.format(results.towing)}</span>
+    </div>
+    <div class="fipe-row">
+      <span class="fipe-label">Custo Total:</span>
+      <span class="fipe-value">${formatter.format(results.totalCost)}</span>
+    </div>
+    <div class="fipe-profit ${isPositive ? '' : 'negative'}">
+      <span class="fipe-label">Lucro Estimado:</span>
+      <span class="fipe-value">${formatter.format(results.profit)}</span>
+      <span class="fipe-badge ${isPositive ? '' : 'negative'}">
+        ${results.profitPercentage.toFixed(1)}%
+      </span>
+    </div>
+  `;
 }
 
 function calculateProfit(fipe: number, bid: number): CalculationResult {

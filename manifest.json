@@ -16,10 +16,5 @@
       "css": ["src/styles.css"],
       "run_at": "document_idle"
     }
-  ],
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "leilao-fipe-helper@antigravity.ia"
-    }
-  }
+  ]
 }

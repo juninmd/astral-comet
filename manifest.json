@@ -12,7 +12,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.freitasleiloeiro.com.br/Leiloes/Lotes*"],
-      "js": ["dist/content_script.js"],
+      "js": ["dist/content_script.global.js"],
       "css": ["src/styles.css"],
       "run_at": "document_idle"
     }

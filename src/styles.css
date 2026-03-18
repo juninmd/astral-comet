@@ -7,7 +7,7 @@
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
   font-family: 'Inter', sans-serif;
   backdrop-filter: blur(5px);
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, border-left-color 0.3s ease;
 }
 
 .fipe-helper-container:hover {
@@ -57,4 +57,14 @@
 .fipe-badge.negative {
   background: #ffebee;
   color: #c62828;
+}
+
+.fipe-loading {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.fipe-not-found {
+  color: #ff5252;
+  font-size: 12px;
 }

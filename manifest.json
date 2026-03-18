@@ -11,10 +11,23 @@
   ],
   "content_scripts": [
     {
-      "matches": ["https://www.freitasleiloeiro.com.br/Leiloes/Lotes*"],
+      "matches": [
+        "https://www.freitasleiloeiro.com.br/Leiloes/Lotes*",
+        "https://www.freitasleiloeiro.com.br/leiloes/lotes*",
+        "https://www.freitasleiloeiro.com.br/Leiloes/LoteDetalhes*",
+        "https://www.freitasleiloeiro.com.br/leiloes/lotedetalhes*",
+        "https://www.freitasleiloeiro.com.br/Leiloes/*",
+        "https://www.freitasleiloeiro.com.br/leiloes/*",
+        "https://freitasleiloeiro.com.br/Leiloes/*",
+        "https://freitasleiloeiro.com.br/leiloes/*"
+      ],
       "js": ["dist/content_script.global.js"],
-      "css": ["src/styles.css"],
+      "css": ["dist/styles.css"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "action": {
+    "default_popup": "dist/popup.html",
+    "default_title": "Configurações"
+  }
 }

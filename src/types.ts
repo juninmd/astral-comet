@@ -16,6 +16,8 @@ export interface CalculationResult {
   bidValue: number;
   commission: number;
   adminFee: number;
+  logisticsFee: number;
+  extraCosts: number;
   atpvFee: number;
   towing: number;
   totalCost: number;

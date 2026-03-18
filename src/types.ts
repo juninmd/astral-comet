@@ -20,6 +20,7 @@ export interface CalculationResult {
   extraCosts: number;
   atpvFee: number;
   towing: number;
+  ipvaFee: number;
   totalCost: number;
   profit: number;
   profitPercentage: number;

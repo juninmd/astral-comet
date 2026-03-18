@@ -68,3 +68,107 @@
   color: #ff5252;
   font-size: 12px;
 }
+
+.fipe-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.fipe-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.fipe-toggle input {
+  margin: 0;
+}
+
+.fipe-manual-btn {
+  border: 1px solid #ccc;
+  background: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.fipe-manual-btn:hover {
+  border-color: #999;
+  background: #f7f7f7;
+}
+
+.fipe-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+}
+
+.fipe-modal {
+  width: min(380px, calc(100vw - 32px));
+  background: #fff;
+  border-radius: 14px;
+  padding: 18px 18px 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  font-family: 'Inter', sans-serif;
+}
+
+.fipe-modal h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.fipe-modal-row {
+  margin-bottom: 10px;
+}
+
+.fipe-modal-row label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.fipe-modal-row input {
+  width: 130px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 13px;
+}
+
+.fipe-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.fipe-modal-actions button {
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.fipe-modal-cancel {
+  background: #f4f4f4;
+  color: #333;
+}
+
+.fipe-modal-submit {
+  background: #00c853;
+  color: #fff;
+}

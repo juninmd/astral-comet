@@ -24,8 +24,9 @@ async function processLot(card: HTMLElement) {
   const model = modelParts.join('/');
   const modelYear = parseInt('20' + yearPart.split('/')[1]);
 
-  // Parse bid: "R$ 18.000,00"
-  const bidValue = parseFloat(bidText.replace(/[^\d,]/g, '').replace(',', '.'));
+  // Parse bid: "R$ 18.000,00" (ou "-" quando ainda não há lance)
+  const numericBid = bidText.replace(/[^\d,]/g, '');
+  const bidValue = numericBid ? parseFloat(numericBid.replace(',', '.')) : 0;
 
   // Inject loading state
   let statusContainer = card.querySelector('.fipe-helper-container') as HTMLElement;
@@ -75,7 +76,7 @@ function updateResults(container: HTMLElement, results: CalculationResult) {
       <span class="fipe-value">${formatter.format(results.towing)}</span>
     </div>
     <div class="fipe-row">
-      <span class="fipe-label">Custo Total:</span>
+      <span class="fipe-label">Valor final do leilão:</span>
       <span class="fipe-value">${formatter.format(results.totalCost)}</span>
     </div>
     <div class="fipe-profit ${isPositive ? '' : 'negative'}">
@@ -139,7 +140,7 @@ function injectResults(target: Element, results: CalculationResult) {
       <span class="fipe-value">${formatter.format(results.towing)}</span>
     </div>
     <div class="fipe-row">
-      <span class="fipe-label">Custo Total:</span>
+      <span class="fipe-label">Valor final do leilão:</span>
       <span class="fipe-value">${formatter.format(results.totalCost)}</span>
     </div>
     <div class="fipe-profit ${isPositive ? '' : 'negative'}">
@@ -158,7 +159,7 @@ function injectResults(target: Element, results: CalculationResult) {
 const observer = new MutationObserver((mutations) => {
   for (const mutation of mutations) {
     if (mutation.type === 'childList') {
-      const cards = document.querySelectorAll('.cardlote');
+      const cards = document.querySelectorAll('.cardlote, .cardLote');
       cards.forEach(card => processLot(card as HTMLElement));
     }
   }
@@ -167,4 +168,4 @@ const observer = new MutationObserver((mutations) => {
 observer.observe(document.body, { childList: true, subtree: true });
 
 // Initial run
-document.querySelectorAll('.cardlote').forEach(card => processLot(card as HTMLElement));
+document.querySelectorAll('.cardlote, .cardLote').forEach(card => processLot(card as HTMLElement));

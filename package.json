@@ -16,6 +16,6 @@
     "@types/chrome": "^0.1.38",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "web-ext": "^10.0.0"
+    "web-ext": "^10.4.0"
   }
 }

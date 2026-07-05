@@ -13,7 +13,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.32.1",
   "devDependencies": {
-    "@types/chrome": "^0.1.38",
+    "@types/chrome": "^0.2.2",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "web-ext": "^10.4.0"

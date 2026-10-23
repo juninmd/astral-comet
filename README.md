@@ -15,9 +15,9 @@ Extensão para Chrome/Brave/Edge e Firefox (Manifest V3) que consulta a **Tabela
 - **Erros tratados**: "FIPE não encontrada" (mostra só os custos, sem lucro falso), limite da API excedido e falta de conexão, ambos com **Tentar novamente**.
 - **Popup de configurações** com atualização imediata nas abas abertas.
 
-| Detalhamento dos custos | |  |
-|---|---|---|
-| ![](docs/screenshots/11-detalhamento-custos.png) | | |
+**Detalhamento dos custos** (recolhível):
+
+![Detalhamento dos custos](docs/screenshots/11-detalhamento-custos.png)
 
 | FIPE não encontrada | Limite da API | Modo manual |
 |---|---|---|

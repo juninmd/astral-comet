@@ -11,9 +11,9 @@ export const DETAIL_URL = 'https://www.freitasleiloeiro.com.br/Leiloes/LoteDetal
 
 const CHROME = process.env.CHROME_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 
-/** Chrome derives an unpacked extension id from the sha256 of its path (a-p alphabet). */
+/** Chrome derives an unpacked extension id from the sha256 of its path (a-p alphabet); on Windows the path is hashed as UTF-16. */
 export function extensionId(path: string): string {
-  return createHash('sha256').update(path).digest('hex').slice(0, 32).replace(/./g, c => String.fromCharCode('a'.charCodeAt(0) + parseInt(c, 16)));
+  return createHash('sha256').update(process.platform === 'win32' ? Buffer.from(path, 'utf16le') : path).digest('hex').slice(0, 32).replace(/./g, c => String.fromCharCode('a'.charCodeAt(0) + parseInt(c, 16)));
 }
 
 export async function launch(): Promise<BrowserContext> {
@@ -100,6 +100,7 @@ export async function mockApis(context: BrowserContext, mode: ApiMode) {
     mode.calls.push(url);
     if (mode.offline) return route.abort('failed');
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' } });
+    if (url.endsWith('/references')) return json(route, [{ code: '338', month: 'outubro/2026' }, { code: '337', month: 'setembro/2026' }]);
     if (url.endsWith('/marcas/v1/carros')) return json(route, brands);
     if (url.endsWith('/marcas/v1/motos')) return json(route, motoBrands);
     if (url.endsWith('/marcas/v1/caminhoes')) return json(route, []);

@@ -12,6 +12,10 @@ export type FipeErrorKind = 'rate-limit' | 'network' | 'not-found';
 
 export interface CalculationResult {
   fipeValue: number;
+  /** What the car is expected to sell for: FIPE minus the configured resale discount. */
+  resaleValue: number;
+  /** Margin over total cost that maxBid preserves, as a fraction (0 = break-even). */
+  targetMargin: number;
   bidValue: number;
   commission: number;
   commissionRate: number;

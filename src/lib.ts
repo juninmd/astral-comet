@@ -19,6 +19,16 @@ export function parseCurrency(text: string): number {
   return Number.isFinite(value) ? value : 0;
 }
 
+/** A non-negative amount typed by the user: "12.000,50", "12000" or "15000.50" (a lone dot before 1-2 digits is a decimal point). */
+export function parseAmount(text: string): number {
+  const cleaned = text.replace(/R\$|\s/gi, '');
+  if (/^-/.test(cleaned)) return 0;
+  const decimalDot = !cleaned.includes(',') && /^\d+\.\d{1,2}$/.test(cleaned);
+  const normalized = decimalDot ? cleaned : cleaned.replace(/\./g, '').replace(',', '.');
+  const value = parseFloat(normalized.replace(/[^\d.]/g, ''));
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 /** Two-digit model year → four digits (anything beyond next year is assumed to be 19xx). */
 export function expandYear(twoDigits: number, now = new Date()): number {
   const current = now.getFullYear();
@@ -47,6 +57,10 @@ export interface Fees {
   /** Rate as a fraction (0.05 = 5%). */
   commissionRate: number;
   ipvaFee: number;
+  /** Expected resale below FIPE, as a fraction (0.1 = sells 10% under FIPE). */
+  resaleDiscount?: number;
+  /** Profit wanted over the total cost, as a fraction (0.1 = 10%). */
+  targetMargin?: number;
 }
 
 /** Fees read from the lot page, which take precedence over user settings. */
@@ -66,13 +80,17 @@ export function calculate(fipe: number, bid: number, settings: Fees, pageFees: P
 
   const fixedCosts = adminFee + logisticsFee + settings.extraCosts + settings.atpvFee + settings.towing + ipvaFee;
   const totalCost = bid + commission + fixedCosts;
-  const profit = fipe - totalCost;
-  // Break-even: bid × (1 + commission) + fixed = FIPE. Rounded down so the bid never overshoots by a cent.
-  const maxBid = Math.max(0, Math.floor(((fipe - fixedCosts) / (1 + commissionRate)) * 100) / 100);
+  const resaleValue = fipe * (1 - (settings.resaleDiscount ?? 0));
+  const profit = resaleValue - totalCost;
+  // Cost may be at most resale / (1 + margin); solve bid × (1 + commission) + fixed = that. Rounded down so the bid never overshoots by a cent.
+  const costLimit = resaleValue / (1 + (settings.targetMargin ?? 0));
+  const maxBid = Math.max(0, Math.floor(((costLimit - fixedCosts) / (1 + commissionRate)) * 100) / 100);
   const profitPercentage = totalCost > 0 ? (profit / totalCost) * 100 : 0;
 
   return {
     fipeValue: fipe,
+    resaleValue,
+    targetMargin: settings.targetMargin ?? 0,
     bidValue: bid,
     commission,
     commissionRate,

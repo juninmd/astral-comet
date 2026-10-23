@@ -42,7 +42,7 @@ export function showVehiclePicker(input: PickerInput, onSubmit: (selection: Sele
       <div class="fipe-modal-row" data-slot="brand"></div>
       <div class="fipe-modal-row" data-slot="model"></div>
       <div class="fipe-modal-row fipe-field"><label for="fipe-year">Ano<span class="fipe-req" aria-hidden="true"> *</span></label><select id="fipe-year" name="year" disabled></select></div>
-      <div class="fipe-modal-row fipe-field"><label for="fipe-ipva">IPVA (se não pago)</label><input id="fipe-ipva" name="ipva" type="number" min="0" step="0.01" placeholder="0" /></div>
+      <div class="fipe-modal-row fipe-field"><label for="fipe-ipva">IPVA (se não pago)</label><input id="fipe-ipva" name="ipva" type="number" min="0" step="0.01" placeholder="0" aria-describedby="fipe-ipva-hint" /><span id="fipe-ipva-hint" class="fipe-hint">Some só se o edital atribuir o IPVA ao comprador; a regra de débitos muda de leilão para leilão.</span></div>
       <div class="fipe-modal-status" role="status" aria-live="polite"></div>
       <div class="fipe-modal-actions">
         <button type="button" class="fipe-modal-cancel">Cancelar</button>
@@ -80,7 +80,7 @@ export function showVehiclePicker(input: PickerInput, onSubmit: (selection: Sele
     button.type = 'button';
     button.className = 'fipe-modal-retry';
     button.textContent = 'Tentar novamente';
-    button.onclick = retry;
+    button.onclick = () => void FipeService.retryNow().then(retry);
     statusEl.append(' ', button);
   }
 

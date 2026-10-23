@@ -9,6 +9,10 @@ export const DEFAULTS = {
   /** Percent, as shown in the popup (5 = 5%). */
   commissionRate: 5,
   ipvaFee: 0,
+  /** Percent under FIPE the car is expected to resell for. */
+  resaleDiscount: 0,
+  /** Percent profit wanted over the total cost. */
+  targetMargin: 0,
 };
 
 export const AUTO_LOOKUP_KEY = 'astralCometAutoLookup';
@@ -31,6 +35,8 @@ export function getSettings(): Promise<Fees> {
         atpvFee: num(r.atpvFee, DEFAULTS.atpvFee),
         commissionRate: num(r.commissionRate, DEFAULTS.commissionRate) / 100,
         ipvaFee: num(r.ipvaFee, DEFAULTS.ipvaFee),
+        resaleDiscount: Math.min(num(r.resaleDiscount, DEFAULTS.resaleDiscount), 95) / 100,
+        targetMargin: num(r.targetMargin, DEFAULTS.targetMargin) / 100,
       });
     });
   });

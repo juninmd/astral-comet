@@ -1,4 +1,5 @@
-import { FipeErrorKind, FipeVehicle } from './types';
+import { fetchJson, fetchPersistent, FipeError, persistentStore } from './fipe_http';
+import { FipeVehicle } from './types';
 
 // Vehicle category as named by each API.
 export interface Category {
@@ -13,12 +14,7 @@ export interface LocatedVehicle { category: Category; brandCode: string; modelCo
 
 export interface ResolvedVehicle { category: Category; brandCode: string; modelCode: string | null; yearCode?: string }
 
-export class FipeError extends Error {
-  constructor(public kind: FipeErrorKind, message: string) {
-    super(message);
-    this.name = 'FipeError';
-  }
-}
+export { FipeError };
 
 // Auction abbreviations → FIPE brand names.
 const BRAND_ALIASES: Record<string, string> = {
@@ -33,7 +29,6 @@ const BRAND_ALIASES: Record<string, string> = {
   'i m trading': 'im trading',
 };
 
-const REQUEST_TIMEOUT_MS = 15000;
 // FIPE lists many variants per model; only the best-ranked few are probed for the year (one request each).
 const MAX_CANDIDATES = 15;
 
@@ -69,29 +64,24 @@ export class FipeService {
     return this.normalize(text).split(' ').filter(w => w.length > 1 || /^\d$/.test(w));
   }
 
+  /** "Tentar novamente" means try the network now, even right after a 429. */
+  static async retryNow() {
+    await persistentStore()?.clearCooldown();
+  }
+
+  // Only the rate-limited FIPE v2 answers (years, prices) are persisted; BrasilAPI is not.
   private static getJson<T>(url: string, token?: string): Promise<T> {
     const key = url;
     const cached = this.cache.get(key);
     if (cached) return cached as Promise<T>;
 
-    const request = (async () => {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-      try {
-        const res = await fetch(url, {
-          signal: controller.signal,
-          headers: token ? { 'X-Subscription-Token': token } : undefined,
-        });
-        if (res.status === 429) throw new FipeError('rate-limit', 'Limite de consultas da API FIPE excedido');
-        if (!res.ok) throw new FipeError('network', `API FIPE respondeu ${res.status}`);
-        return await res.json() as T;
-      } catch (e) {
-        if (e instanceof FipeError) throw e;
-        throw new FipeError('network', 'Falha ao acessar a API FIPE');
-      } finally {
-        clearTimeout(timer);
-      }
-    })();
+    const store = url.startsWith(this.FIPE_URL) ? persistentStore() : null;
+    const request = store
+      ? fetchPersistent<T>(url, token, store, `${this.FIPE_URL}/references`).then(r => {
+        if (r.stale) this.cache.delete(key); // an old answer must not shadow the network for the rest of the page's life
+        return r.value;
+      })
+      : fetchJson<T>(url, token);
 
     this.cache.set(key, request);
     request.catch(() => this.cache.delete(key)); // never cache failures

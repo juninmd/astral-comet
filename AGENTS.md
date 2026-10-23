@@ -15,7 +15,11 @@ src/vehicle_picker.ts   # modal "Selecionar veículo" (categoria → marca → m
 src/combobox.ts         # combobox acessível (teclado) usado pelo seletor
 src/search.ts           # busca/filtro de modelos por vários termos, sem acento
 src/fipe_service.ts     # consulta FIPE: marca → modelo (ranking) → ano → preço; cache + FipeError
-src/lib.ts              # funções puras: parseCurrency, parseDescription, calculate
+src/fipe_http.ts        # fetch com timeout, cache persistente (storage.local), cópia reserva em erro, pausa após 429
+src/persistent_cache.ts # cache por tabela de referência FIPE, cooldown e contador de cota
+src/lib.ts              # funções puras: parseCurrency, parseDescription, calculate (revenda, meta, lance máximo)
+src/risks.ts            # chips de risco a partir do texto do lote (ignora o aviso genérico do leilão)
+src/lot_store.ts        # favorito/checklist/lance-alvo/notas por lote (storage.local); src/lot_notes.ts é a UI
 src/settings.ts         # defaults e acesso ao chrome.storage.sync
 src/popup.{html,ts}     # configurações de custos e token FIPE
 src/styles.css          # CSS injetado

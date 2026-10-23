@@ -1,6 +1,7 @@
 import { DEFAULTS, TOKEN_KEY, setStored } from './settings';
+import { renderFavorites, renderQuota } from './popup_extras';
 
-const fields = ['commissionRate', 'adminFee', 'logisticsFee', 'towing', 'extraCosts'] as const;
+const fields = ['commissionRate', 'adminFee', 'logisticsFee', 'towing', 'extraCosts', 'resaleDiscount', 'targetMargin'] as const;
 type Field = typeof fields[number];
 
 const inputs = Object.fromEntries(
@@ -21,11 +22,13 @@ function loadSettings() {
   });
 }
 
+const MAX: Partial<Record<Field, number>> = { commissionRate: 100, resaleDiscount: 95, targetMargin: 1000 };
+
 /** Parses an input as a non-negative number (comma accepted); falls back to the default when empty/invalid. */
 function readField(f: Field): number {
   const value = parseFloat(inputs[f].value.replace(',', '.'));
   if (!Number.isFinite(value) || value < 0) return DEFAULTS[f];
-  return f === 'commissionRate' ? Math.min(value, 100) : value;
+  return Math.min(value, MAX[f] ?? Infinity);
 }
 
 async function saveSettings() {
@@ -36,6 +39,7 @@ async function saveSettings() {
   }
 
   await setStored(values);
+  void renderQuota(); // the token decides which limit applies
   successMsg.style.display = 'block';
   setTimeout(() => { successMsg.style.display = 'none'; }, 2000);
 }
@@ -53,3 +57,5 @@ form.addEventListener('submit', (e) => {
 resetBtn.addEventListener('click', resetDefaults);
 
 loadSettings();
+void renderQuota();
+void renderFavorites();

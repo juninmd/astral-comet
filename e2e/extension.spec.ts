@@ -65,6 +65,18 @@ test('unknown vehicle shows "FIPE não encontrada" without a fake profit', async
   await shot(page, '02-fipe-nao-encontrada');
 });
 
+// 2b ─ the auction name only pins down the family: the price is shown but flagged as a guess
+test('a guessed variant is labelled "aproximado"; a pinned-down one is not', async () => {
+  lots = [UNO, { desc: 'FIAT/PALIO, 08/09', bid: 5000 }, { desc: 'I/VW/GOL CIT 10, 12/13', bid: 38000 }];
+  const page = await open();
+  await expect(lotCard(page, 1)).toContainText('Palio Fire 1.0');
+  await expect(lotCard(page, 1).locator('.fipe-approx')).toHaveText('aproximado');
+  await expect(lotCard(page, 0)).toContainText('Uno Mille Economy');
+  await expect(lotCard(page, 0).locator('.fipe-approx')).toHaveCount(0);
+  await expect(lotCard(page, 2)).toContainText('Gol City 1.0'); // truncated "CIT 10" still finds the variant
+  await expect(lotCard(page, 2).locator('.fipe-approx')).toHaveCount(0);
+});
+
 // 3 ─ no render loop: DOM settles and API is hit once per resource
 test('no infinite re-render loop and API calls are deduplicated', async () => {
   const page = await open();

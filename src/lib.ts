@@ -36,16 +36,26 @@ export function expandYear(twoDigits: number, now = new Date()): number {
   return year > current + 1 ? 1900 + twoDigits : year;
 }
 
+// "I/TOYOTA HILUX ..." (imported): the first segment is a marker and the brand is the first word(s) of the next one.
+const IMPORT_MARKERS = new Set(['I', 'IMP', 'IMPORTADO']);
+const MULTIWORD_BRANDS = ['ALFA ROMEO', 'LAND ROVER', 'ASTON MARTIN', 'ROLLS ROYCE', 'GREAT WALL', 'HARLEY DAVIDSON', 'CAOA CHERY', 'MERCEDES BENZ'];
+
 /** Parses "FIAT/UNO MILLE, 08/09" (optionally prefixed by "I/") into brand, model and model year. */
 export function parseDescription(description: string): { brand: string; model: string; modelYear: number } | null {
   const match = description.match(/^(?:[^/]+\/)?([^/]+)\/(.+?),\s*(\d{2})\/(\d{2})/);
   if (!match) return null;
 
-  return {
-    brand: match[1].trim(),
-    model: match[2].trim(),
-    modelYear: expandYear(parseInt(match[4], 10)),
-  };
+  let brand = match[1].trim();
+  let model = match[2].trim();
+  if (IMPORT_MARKERS.has(brand.toUpperCase())) {
+    const upper = model.toUpperCase();
+    const compound = MULTIWORD_BRANDS.find(b => upper === b || upper.startsWith(`${b} `));
+    const [first, ...rest] = model.split(/\s+/);
+    if (compound) { brand = model.slice(0, compound.length); model = model.slice(compound.length).trim(); }
+    else if (rest.length) { brand = first; model = rest.join(' '); }
+  }
+
+  return { brand, model, modelYear: expandYear(parseInt(match[4], 10)) };
 }
 
 export interface Fees {

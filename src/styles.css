@@ -784,3 +784,9 @@
   font-size: 11px;
   color: var(--fipe-muted);
 }
+
+.fipe-approx {
+  color: var(--fipe-warn);
+  font-weight: 700;
+  cursor: help;
+}

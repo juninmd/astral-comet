@@ -9,10 +9,15 @@ Extensão para Chrome/Brave/Edge e Firefox (Manifest V3) que consulta a **Tabela
 - **Consulta FIPE automática** em cada lote (lista e página de detalhes), com o modelo FIPE encontrado e o mês de referência.
 - **Custos lidos da própria página** (comissão, despesas administrativas, logística, "IPVA pago"); quando o lote não informa, usa os valores configurados no popup.
 - **Cálculo de lucro**: lance + comissão + despesas adm/org/dep + logística + custos extras + ATPV-e + guincho + IPVA (se não pago). Verde = lucro, vermelho = prejuízo.
+- **Visual moderno**: o lucro estimado em destaque (valor + %), cartões de *Valor FIPE* e *Custo Total*, e o **detalhamento dos custos recolhível** (o estado aberto/fechado é mantido quando o lance atualiza). Chave liga/desliga para a consulta automática, *skeleton* de carregamento, alertas amarelos para erros, modal com foco visível e respeito a `prefers-reduced-motion`. O popup tem tema claro/escuro automático.
 - **Match inteligente**: normaliza acentos, entende abreviações do leilão (`VW`, `GM`, `M.BENZ`, `I/` de importado), mantém cilindrada (`1.0`) e testa as variantes mais parecidas até achar o ano do modelo (±1 ano como fallback). Procura em carros, motos e caminhões.
 - **Modo manual**: desligue a "Consulta automática" ou use **Selecionar veículo** para corrigir marca/modelo/ano e informar o IPVA.
 - **Erros tratados**: "FIPE não encontrada" (mostra só os custos, sem lucro falso), limite da API excedido e falta de conexão, ambos com **Tentar novamente**.
 - **Popup de configurações** com atualização imediata nas abas abertas.
+
+| Detalhamento dos custos | |  |
+|---|---|---|
+| ![](docs/screenshots/11-detalhamento-custos.png) | | |
 
 | FIPE não encontrada | Limite da API | Modo manual |
 |---|---|---|

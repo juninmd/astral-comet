@@ -26,7 +26,10 @@ const open = async (url = LIST_URL) => {
   await page.goto(url);
   return page;
 };
-const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png` });
+const shot = async (page: Page, name: string) => {
+  await page.waitForTimeout(350); // let entry animations settle
+  await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
+};
 
 // 1 ─ happy path: profit math, colors, FIPE model line
 test('list page: profit (green) and loss (red) with page fees', async () => {
@@ -39,13 +42,16 @@ test('list page: profit (green) and loss (red) with page fees', async () => {
   await expect(uno).toContainText('Comissão Leiloeiro (5%)');
   await expect(uno).toContainText('Uno Mille Economy 1.0 Fire Flex 8V 4p');
   await expect(uno.locator('.fipe-profit')).not.toHaveClass(/negative/);
-  await expect.poll(() => uno.evaluate(e => getComputedStyle(e).borderLeftColor)).toBe('rgb(0, 200, 83)'); // waits for the CSS transition
+  await expect.poll(() => uno.evaluate(e => getComputedStyle(e).borderLeftColor)).toBe('rgb(5, 150, 105)'); // waits for the CSS transition
 
   const gol = lotCard(page, 1);
   await expect(gol).toContainText('Lucro Estimado');
   await expect(gol.locator('.fipe-profit')).toHaveClass(/negative/);
-  await expect.poll(() => gol.evaluate(e => getComputedStyle(e).borderLeftColor)).toBe('rgb(255, 82, 82)');
+  await expect.poll(() => gol.evaluate(e => getComputedStyle(e).borderLeftColor)).toBe('rgb(220, 38, 38)');
   await shot(page, '01-lista-lotes');
+  await uno.locator('.fipe-details summary').click();
+  await expect(uno.locator('.fipe-details')).toHaveJSProperty('open', true);
+  await shot(page, '11-detalhamento-custos');
 });
 
 // 2 ─ not found
@@ -99,12 +105,14 @@ test('API offline shows a connection error', async () => {
 test('bid update re-renders the lot', async () => {
   const page = await open();
   await expect(lotCard(page, 0)).toContainText('R$ 10.106,00');
+  await lotCard(page, 0).locator('.fipe-details summary').click(); // stays open across re-renders
   await page.evaluate(() => {
     document.querySelector('#vlr-0')!.textContent = 'R$ 6.000,00';
     (document.querySelector('[data-testid="lot-0"] #hdMaiorLance') as HTMLInputElement).value = '6000';
   });
   // 6000 + 300 + 1900 + 1416 + 40 + 1500 = 11156
   await expect(lotCard(page, 0)).toContainText('R$ 11.156,00');
+  await expect(lotCard(page, 0).locator('.fipe-details')).toHaveJSProperty('open', true);
 });
 
 // 7 ─ IPVA

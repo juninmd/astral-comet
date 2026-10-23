@@ -5,6 +5,8 @@ import { getAutoLookupEnabled, getSettings, getToken, setStored, AUTO_LOOKUP_KEY
 
 const VEHICLE_DESCRIPTION_PATTERN = /(?:[^/\s,]+\/)?[^/,]+\/[^,]+,\s*\d{2}\/\d{2}/i;
 const DETAIL_PANEL_ID = 'fipe-detail-helper';
+const COLOR_GOOD = '#059669';
+const COLOR_BAD = '#dc2626';
 const COMMISSION_PATTERN = /(\d+(?:[.,]\d+)?)\s*%\s*(?:referente à comissão|comissão do leiloeiro)/i;
 const ADMIN_FEE_PATTERN = /Despesas administrativas[^,]*?(?:Organização e Depósito)?[^,]*?no valor de\s*(R\$\s*[\d.]+,\d{2})/i;
 const LOGISTICS_FEE_PATTERN = /Despesas de logística[^,]*?no valor de\s*(R\$\s*[\d.]+,\d{2})/i;
@@ -285,47 +287,58 @@ function row(label: string, value: string, extra = ''): string {
   return `<div class="fipe-row"${extra}><span class="fipe-label">${label}</span><span class="fipe-value">${value}</span></div>`;
 }
 
+function stat(label: string, value: string): string {
+  return `<div class="fipe-stat"><span class="fipe-label">${label}</span><span class="fipe-value">${value}</span></div>`;
+}
+
 function updateResults(container: HTMLElement, results: CalculationResult, fipe: { value: number; model: string; reference: string } | null) {
   const resultsEl = getResultsContainer(container);
   const pct = Number((results.commissionRate * 100).toFixed(2)).toLocaleString('pt-BR');
+  const wasOpen = container.dataset.detailsOpen === 'true';
 
-  const costs = [
-    row('Lance (Maior/Inicial):', brl.format(results.bidValue)),
-    row(`Comissão Leiloeiro (${pct}%):`, brl.format(results.commission)),
-    row('Despesas Adm/Org/Dep:', brl.format(results.adminFee)),
-    row('Despesas Logística:', brl.format(results.logisticsFee)),
-    row('Custos Extras:', brl.format(results.extraCosts)),
-    row('ATPV-e:', brl.format(results.atpvFee)),
-    row('Guincho (Est.):', brl.format(results.towing)),
-    results.ipvaFee > 0 ? row('IPVA (não pago):', brl.format(results.ipvaFee)) : '',
-    row('Custo Total:', brl.format(results.totalCost), ' style="font-weight:700"'),
-  ].join('');
+  const breakdown = `
+    <details class="fipe-details"${wasOpen ? ' open' : ''}>
+      <summary>Detalhamento dos custos</summary>
+      ${[
+        row('Lance (Maior/Inicial):', brl.format(results.bidValue)),
+        row(`Comissão Leiloeiro (${pct}%):`, brl.format(results.commission)),
+        row('Despesas Adm/Org/Dep:', brl.format(results.adminFee)),
+        row('Despesas Logística:', brl.format(results.logisticsFee)),
+        row('Custos Extras:', brl.format(results.extraCosts)),
+        row('ATPV-e:', brl.format(results.atpvFee)),
+        row('Guincho (Est.):', brl.format(results.towing)),
+        results.ipvaFee > 0 ? row('IPVA (não pago):', brl.format(results.ipvaFee)) : '',
+      ].join('')}
+    </details>`;
 
   if (!fipe) {
     container.style.borderLeftColor = '';
-    resultsEl.innerHTML = costs;
+    resultsEl.innerHTML = `<div class="fipe-stats">${stat('Lance', brl.format(results.bidValue))}${stat('Custo Total', brl.format(results.totalCost))}</div>${breakdown}`;
     return;
   }
 
   const isPositive = results.profit > 0;
-  container.style.borderLeftColor = isPositive ? '#00c853' : '#ff5252';
+  const tone = isPositive ? '' : ' negative';
+  container.style.borderLeftColor = isPositive ? COLOR_GOOD : COLOR_BAD;
   resultsEl.innerHTML = `
-    ${costs}
-    <div class="fipe-row" style="margin-top:8px;border-top:1px solid #ccc;padding-top:8px">
-      <span class="fipe-label">Valor FIPE:</span>
-      <span class="fipe-value">${brl.format(fipe.value)}</span>
+    <div class="fipe-hero${tone}">
+      <span class="fipe-label">Lucro Estimado</span>
+      <div class="fipe-profit${tone}">
+        <span class="fipe-value">${brl.format(results.profit)}</span>
+        <span class="fipe-badge${tone}">${results.profitPercentage.toFixed(1)}%</span>
+      </div>
     </div>
-    <div class="fipe-row fipe-fipe-model"><span class="fipe-label">${escapeHtml(fipe.model)} · ${escapeHtml(fipe.reference)}</span></div>
-    <div class="fipe-profit ${isPositive ? '' : 'negative'}">
-      <span class="fipe-label">Lucro Estimado:</span>
-      <span class="fipe-value">${brl.format(results.profit)}</span>
-      <span class="fipe-badge ${isPositive ? '' : 'negative'}">${results.profitPercentage.toFixed(1)}%</span>
+    <div class="fipe-stats">
+      ${stat('Valor FIPE', brl.format(fipe.value))}
+      ${stat('Custo Total', brl.format(results.totalCost))}
     </div>
+    <span class="fipe-fipe-model">${escapeHtml(fipe.model)} · ${escapeHtml(fipe.reference)}</span>
+    ${breakdown}
   `;
 }
 
 function showMessage(container: HTMLElement, message: string, cls = 'fipe-not-found') {
-  getResultsContainer(container).innerHTML = `<div class="fipe-row"><span class="fipe-label ${cls}">${escapeHtml(message)}</span></div>`;
+  getResultsContainer(container).innerHTML = `<div class="fipe-alert"><span class="${cls}">${escapeHtml(message)}</span></div>`;
 }
 
 async function renderEvaluation(container: HTMLElement, ctx: LotContext, override?: Parsed) {
@@ -341,7 +354,7 @@ async function renderEvaluation(container: HTMLElement, ctx: LotContext, overrid
   const run = String(Number(container.dataset.run ?? '0') + 1);
   container.dataset.run = run;
   container.dataset.state = 'loading';
-  getResultsContainer(container).innerHTML = '<div class="fipe-row fipe-loading"><span class="fipe-label">Consultando FIPE...</span></div>';
+  getResultsContainer(container).innerHTML = '<div class="fipe-loading"><div class="fipe-skeleton"><span class="fipe-label">Consultando FIPE...</span><i></i><i></i></div></div>';
 
   const bidValue = parseCurrency(ctx.bidText);
   const [settings, token] = await Promise.all([getSettings(), getToken()]);
@@ -355,7 +368,7 @@ async function renderEvaluation(container: HTMLElement, ctx: LotContext, overrid
       container.dataset.state = 'notfound';
       updateResults(container, costs, null);
       getResultsContainer(container).insertAdjacentHTML('beforeend',
-        `<div class="fipe-row"><span class="fipe-label fipe-not-found">FIPE não encontrada para ${escapeHtml(`${parsed.brand} ${parsed.model} (${parsed.modelYear})`)}</span></div>`);
+        `<div class="fipe-alert"><span class="fipe-not-found">FIPE não encontrada para ${escapeHtml(`${parsed.brand} ${parsed.model} (${parsed.modelYear})`)}</span></div>`);
       return;
     }
 
@@ -371,7 +384,7 @@ async function renderEvaluation(container: HTMLElement, ctx: LotContext, overrid
       ? 'Limite da API FIPE excedido. Tente mais tarde ou informe um token no popup.'
       : 'Não foi possível consultar a FIPE. Verifique sua conexão.';
     getResultsContainer(container).insertAdjacentHTML('beforeend',
-      `<div class="fipe-row"><span class="fipe-label fipe-not-found">${escapeHtml(message)}</span><button type="button" class="fipe-retry">Tentar novamente</button></div>`);
+      `<div class="fipe-alert"><span class="fipe-not-found">${escapeHtml(message)}</span><button type="button" class="fipe-retry">Tentar novamente</button></div>`);
     container.querySelector<HTMLButtonElement>('.fipe-retry')?.addEventListener('click', () => {
       void renderEvaluation(container, ctx, override);
     });
@@ -394,6 +407,11 @@ function openManual(container: HTMLElement) {
 function buildControls(container: HTMLElement) {
   const controls = container.querySelector<HTMLElement>('.fipe-controls');
   if (!controls || controls.childElementCount > 0) return;
+
+  // Remember whether the cost breakdown is open: results are rebuilt on every refresh. 'toggle' doesn't bubble.
+  container.addEventListener('toggle', (event) => {
+    if (event.target instanceof HTMLDetailsElement) container.dataset.detailsOpen = String(event.target.open);
+  }, true);
 
   const toggleLabel = document.createElement('label');
   toggleLabel.className = 'fipe-toggle';
@@ -444,12 +462,11 @@ async function renderWithMode(container: HTMLElement, ctx: LotContext) {
   const parsed = parseDescription(ctx.description);
   const resultsEl = getResultsContainer(container);
   resultsEl.innerHTML = `
-    <div class="fipe-row">
-      <span class="fipe-label">Modo manual:</span>
-      <span class="fipe-value">${parsed ? escapeHtml(`${parsed.brand} / ${parsed.model} (${parsed.modelYear})`) : 'Nenhum veículo detectado'}</span>
-    </div>
-    <div class="fipe-row">
-      <span class="fipe-label"></span>
+    <div class="fipe-manual-state">
+      <div>
+        <span class="fipe-label">Modo manual</span><br>
+        <span class="fipe-value">${parsed ? escapeHtml(`${parsed.brand} / ${parsed.model} (${parsed.modelYear})`) : 'Nenhum veículo detectado'}</span>
+      </div>
       <button type="button" class="fipe-manual-open">Abrir seleção</button>
     </div>
   `;

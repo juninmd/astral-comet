@@ -64,8 +64,11 @@ export function calculate(fipe: number, bid: number, settings: Fees, pageFees: P
   const logisticsFee = pageFees.logisticsFee ?? settings.logisticsFee;
   const ipvaFee = pageFees.ipvaPaid ? 0 : settings.ipvaFee;
 
-  const totalCost = bid + commission + adminFee + logisticsFee + settings.extraCosts + settings.atpvFee + settings.towing + ipvaFee;
+  const fixedCosts = adminFee + logisticsFee + settings.extraCosts + settings.atpvFee + settings.towing + ipvaFee;
+  const totalCost = bid + commission + fixedCosts;
   const profit = fipe - totalCost;
+  // Break-even: bid × (1 + commission) + fixed = FIPE. Rounded down so the bid never overshoots by a cent.
+  const maxBid = Math.max(0, Math.floor(((fipe - fixedCosts) / (1 + commissionRate)) * 100) / 100);
   const profitPercentage = totalCost > 0 ? (profit / totalCost) * 100 : 0;
 
   return {
@@ -80,6 +83,7 @@ export function calculate(fipe: number, bid: number, settings: Fees, pageFees: P
     towing: settings.towing,
     ipvaFee,
     totalCost,
+    maxBid,
     profit,
     profitPercentage,
   };

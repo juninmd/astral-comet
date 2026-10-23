@@ -198,6 +198,47 @@
   margin-top: 8px;
 }
 
+.fipe-maxbid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--fipe-good-bg);
+  border: 1px solid rgba(5, 150, 105, 0.25);
+}
+
+.fipe-maxbid.negative {
+  background: var(--fipe-bad-bg);
+  border-color: rgba(220, 38, 38, 0.25);
+}
+
+/* Darker than --fipe-good/--fipe-bad: small text on a tinted background needs ≥ 4.5:1. */
+.fipe-maxbid .fipe-label {
+  font-size: 11px;
+  color: #065f46;
+}
+
+.fipe-maxbid.negative .fipe-label,
+.fipe-maxbid.negative .fipe-value {
+  color: #b91c1c;
+}
+
+.fipe-maxbid .fipe-value {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--fipe-ink);
+}
+
+.fipe-maxbid-note {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--fipe-muted);
+}
+
 .fipe-stat {
   display: flex;
   flex-direction: column;
@@ -397,13 +438,14 @@
   background: rgba(15, 23, 42, 0.45);
   backdrop-filter: blur(3px);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow-y: auto; /* short viewports: scroll the overlay instead of cutting off the buttons */
+  padding: 16px 0;
   z-index: 999999;
   animation: fipe-fade 0.15s ease;
 }
 
 .fipe-modal {
+  margin: auto; /* centres when it fits, scrolls from the top when it doesn't */
   width: min(400px, calc(100vw - 32px));
   background: var(--fipe-surface);
   border-radius: 20px;
@@ -420,13 +462,13 @@
   color: var(--fipe-ink);
 }
 
-.fipe-modal h3::after {
-  content: 'Corrija marca, modelo ou ano para refazer a consulta.';
-  display: block;
-  margin-top: 2px;
+.fipe-modal:focus {
+  outline: none;
+}
+
+.fipe-modal-sub {
+  margin: 2px 0 0;
   font-size: 12px;
-  font-weight: 400;
-  letter-spacing: 0;
   color: var(--fipe-muted);
 }
 
@@ -434,27 +476,24 @@
   margin-top: 12px;
 }
 
-.fipe-modal-row label {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+.fipe-field > label {
+  display: block;
+  margin-bottom: 5px;
   font-size: 12px;
   font-weight: 600;
   color: #334155;
 }
 
-/* "*" marker sits right after the label text */
-.fipe-modal-row label > span {
-  order: 0;
+.fipe-req {
   color: var(--fipe-bad);
 }
 
-.fipe-modal-row input {
-  order: 1;
+.fipe-modal-row input,
+.fipe-modal-row select {
   width: 100%;
   padding: 9px 12px;
   border-radius: 10px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #94a3b8;
   background: #fff;
   color: var(--fipe-ink);
   font: inherit;
@@ -462,10 +501,96 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.fipe-modal-row input:focus {
+.fipe-modal-row input:disabled,
+.fipe-modal-row select:disabled {
+  background: var(--fipe-subtle);
+  border-color: var(--fipe-line);
+  color: var(--fipe-muted);
+  cursor: not-allowed;
+}
+
+.fipe-modal-row input:focus,
+.fipe-modal-row select:focus {
   outline: none;
   border-color: var(--fipe-accent);
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
+}
+
+/* ---------- Searchable dropdown ---------- */
+.fipe-combo {
+  position: relative;
+}
+
+.fipe-combo-pop {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--fipe-surface);
+  border: 1px solid var(--fipe-line);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px -8px rgba(15, 23, 42, 0.3);
+  overflow: hidden;
+}
+
+.fipe-combo-pop[hidden] {
+  display: none;
+}
+
+.fipe-combo-pop ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.fipe-combo-pop li {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--fipe-ink);
+  cursor: pointer;
+}
+
+.fipe-combo-pop li[aria-selected='true'] {
+  font-weight: 700;
+}
+
+.fipe-combo-pop li.fipe-active {
+  background: #eef2ff;
+  box-shadow: inset 3px 0 0 var(--fipe-accent);
+}
+
+.fipe-combo-foot {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--fipe-muted);
+  border-top: 1px solid var(--fipe-line);
+}
+
+.fipe-combo-foot:empty {
+  display: none;
+}
+
+.fipe-modal-status {
+  min-height: 18px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--fipe-warn);
+}
+
+.fipe-modal-retry {
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fipe-accent-strong);
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .fipe-modal-actions {
@@ -504,8 +629,14 @@
   color: #fff;
 }
 
-.fipe-modal-submit:hover {
+.fipe-modal-submit:hover:not(:disabled) {
   background: var(--fipe-accent-strong);
+}
+
+.fipe-modal-submit:disabled {
+  background: #cbd5e1;
+  color: #475569;
+  cursor: not-allowed;
 }
 
 .fipe-modal-actions button:focus-visible {

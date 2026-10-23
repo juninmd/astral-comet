@@ -2,13 +2,15 @@ import { FipeError, FipeService } from './fipe_service';
 import { CalculationResult } from './types';
 import { calculate, CURRENCY_PATTERN, extractCurrency, PageFees, parseCurrency, parseDescription } from './lib';
 import { getAutoLookupEnabled, getSettings, getToken, setStored, AUTO_LOOKUP_KEY } from './settings';
+import { categoryOf, Selection, showVehiclePicker } from './vehicle_picker';
 
 const VEHICLE_DESCRIPTION_PATTERN = /(?:[^/\s,]+\/)?[^/,]+\/[^,]+,\s*\d{2}\/\d{2}/i;
 const DETAIL_PANEL_ID = 'fipe-detail-helper';
 const COLOR_GOOD = '#059669';
 const COLOR_BAD = '#dc2626';
 const COMMISSION_PATTERN = /(\d+(?:[.,]\d+)?)\s*%\s*(?:referente à comissão|comissão do leiloeiro)/i;
-const ADMIN_FEE_PATTERN = /Despesas administrativas[^,]*?(?:Organização e Depósito)?[^,]*?no valor de\s*(R\$\s*[\d.]+,\d{2})/i;
+// The site words this fee "administrativas" on some auctions and "operacionais" on others.
+const ADMIN_FEE_PATTERN = /Despesas (?:administrativas|operacionais)[^,]*?no valor de\s*(R\$\s*[\d.]+,\d{2})/i;
 const LOGISTICS_FEE_PATTERN = /Despesas de logística[^,]*?no valor de\s*(R\$\s*[\d.]+,\d{2})/i;
 
 async function setIpvaFee(value: number): Promise<void> {
@@ -64,11 +66,21 @@ function isVisible(element: Element): boolean {
   return Boolean(htmlElement.offsetWidth || htmlElement.offsetHeight || htmlElement.getClientRects().length);
 }
 
+const OWN_UI = '.fipe-helper-container, .fipe-modal-overlay';
+
+/** Page text only: our own panel must never be read back as lot data (it holds the very numbers we compute). */
+function pageText(element: Element): string {
+  if (!element.querySelector(OWN_UI)) return getTextContent(element);
+  const clone = element.cloneNode(true) as Element;
+  clone.querySelectorAll(OWN_UI).forEach(node => node.remove());
+  return getTextContent(clone);
+}
+
 function findElementsByText(root: ParentNode, pattern: RegExp): HTMLElement[] {
   const matches: HTMLElement[] = [];
 
   if (root instanceof Element) {
-    const rootText = getTextContent(root);
+    const rootText = pageText(root);
     if (rootText && pattern.test(rootText)) {
       matches.push(root as HTMLElement);
     }
@@ -77,8 +89,8 @@ function findElementsByText(root: ParentNode, pattern: RegExp): HTMLElement[] {
   const elements = root.querySelectorAll('div, span, p, h1, h2, h3, h4, td, li, small, strong, a');
   for (let index = 0; index < elements.length; index += 1) {
     const element = elements[index];
-    if (!isVisible(element)) continue;
-    const text = getTextContent(element);
+    if (element.closest(OWN_UI) || !isVisible(element)) continue;
+    const text = pageText(element);
     if (!text || text.length > 600) continue;
     if (pattern.test(text)) {
       matches.push(element as HTMLElement);
@@ -121,81 +133,6 @@ function findDescriptionElement(root: ParentNode): HTMLElement | null {
   return textMatches.find(element => getTextContent(element).length < 250) || null;
 }
 
-function createManualModal() {
-  const existing = document.querySelector('.fipe-modal-overlay');
-  if (existing) return existing as HTMLElement;
-
-  const overlay = document.createElement('div');
-  overlay.className = 'fipe-modal-overlay';
-  overlay.innerHTML = `
-    <div class="fipe-modal">
-      <h3>Consultar FIPE</h3>
-      <div class="fipe-modal-row">
-        <label>Marca<span>*</span><input name="brand" type="text" autocomplete="off" /></label>
-      </div>
-      <div class="fipe-modal-row">
-        <label>Modelo<span>*</span><input name="model" type="text" autocomplete="off" /></label>
-      </div>
-      <div class="fipe-modal-row">
-        <label>Ano<span>*</span><input name="year" type="number" min="1900" max="2100" /></label>
-      </div>
-      <div class="fipe-modal-row">
-        <label>IPVA (se não pago)<span></span><input name="ipva" type="number" min="0" step="0.01" placeholder="0" /></label>
-      </div>
-      <div class="fipe-modal-actions">
-        <button type="button" class="fipe-modal-cancel">Cancelar</button>
-        <button type="button" class="fipe-modal-submit">Consultar</button>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
-  return overlay;
-}
-
-function showManualModal(
-  defaults: { brand?: string; model?: string; modelYear?: number; ipvaFee?: number } | null,
-  onSubmit: (brand: string, model: string, year: number, ipvaFee: number) => void
-) {
-  const overlay = createManualModal();
-  const brandInput = overlay.querySelector<HTMLInputElement>('input[name="brand"]')!;
-  const modelInput = overlay.querySelector<HTMLInputElement>('input[name="model"]')!;
-  const yearInput = overlay.querySelector<HTMLInputElement>('input[name="year"]')!;
-  const ipvaInput = overlay.querySelector<HTMLInputElement>('input[name="ipva"]')!;
-  const cancelBtn = overlay.querySelector<HTMLButtonElement>('.fipe-modal-cancel')!;
-  const submitBtn = overlay.querySelector<HTMLButtonElement>('.fipe-modal-submit')!;
-
-  brandInput.value = defaults?.brand ?? '';
-  modelInput.value = defaults?.model ?? '';
-  yearInput.value = defaults?.modelYear ? String(defaults.modelYear) : '';
-  ipvaInput.value = defaults?.ipvaFee ? String(defaults.ipvaFee) : '';
-
-  const close = () => {
-    overlay.remove();
-    document.removeEventListener('keydown', onKeyDown);
-  };
-
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      close();
-    }
-  };
-
-  cancelBtn.onclick = () => close();
-  submitBtn.onclick = () => {
-    const brand = brandInput.value.trim();
-    const model = modelInput.value.trim();
-    const year = parseInt(yearInput.value, 10);
-    const ipvaFee = parseFloat(ipvaInput.value.replace(',', '.')) || 0;
-    if (!brand || !model || Number.isNaN(year)) return;
-    onSubmit(brand, model, year, ipvaFee);
-    close();
-  };
-
-  document.addEventListener('keydown', onKeyDown);
-}
-
 function findBidText(root: ParentNode): string {
   for (const selector of ['#hdMaiorLance', '#dvMaiorLance', '[id*="MaiorLance"]', '[class*="MaiorLance"]']) {
     const elements = root.querySelectorAll(selector);
@@ -219,7 +156,7 @@ function findBidText(root: ParentNode): string {
   }
 
   const candidates = findElementsByText(root, CURRENCY_PATTERN)
-    .map(element => getTextContent(element))
+    .map(element => pageText(element))
     .filter(text => !/incremento/i.test(text));
 
   const currentBid = candidates.find(text => /maior lance|lance atual/i.test(text));
@@ -276,11 +213,9 @@ interface LotContext {
   bidText: string;
 }
 
-type Parsed = { brand: string; model: string; modelYear: number };
-
 const contexts = new WeakMap<HTMLElement, LotContext>();
 // Vehicle picked manually for a lot; survives re-renders until the lot's description changes.
-const overrides = new WeakMap<HTMLElement, Parsed>();
+const overrides = new WeakMap<HTMLElement, Selection>();
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 function row(label: string, value: string, extra = ''): string {
@@ -289,6 +224,16 @@ function row(label: string, value: string, extra = ''): string {
 
 function stat(label: string, value: string): string {
   return `<div class="fipe-stat"><span class="fipe-label">${label}</span><span class="fipe-value">${value}</span></div>`;
+}
+
+function maxBidBlock(r: CalculationResult): string {
+  const title = '<span class="fipe-label">Lance máximo (sem prejuízo)</span>';
+  if (r.maxBid <= 0) {
+    return `<div class="fipe-maxbid negative">${title}<span class="fipe-value">Inviável</span><span class="fipe-maxbid-note">Os custos fixos superam a FIPE</span></div>`;
+  }
+  const gap = r.maxBid - r.bidValue;
+  const note = gap >= 0 ? `Folga de ${brl.format(gap)} sobre o lance atual` : `Lance atual excede em ${brl.format(-gap)}`;
+  return `<div class="fipe-maxbid${gap < 0 ? ' negative' : ''}">${title}<span class="fipe-value">${brl.format(r.maxBid)}</span><span class="fipe-maxbid-note">${note}</span></div>`;
 }
 
 function updateResults(container: HTMLElement, results: CalculationResult, fipe: { value: number; model: string; reference: string } | null) {
@@ -332,6 +277,7 @@ function updateResults(container: HTMLElement, results: CalculationResult, fipe:
       ${stat('Valor FIPE', brl.format(fipe.value))}
       ${stat('Custo Total', brl.format(results.totalCost))}
     </div>
+    ${maxBidBlock(results)}
     <span class="fipe-fipe-model">${escapeHtml(fipe.model)} · ${escapeHtml(fipe.reference)}</span>
     ${breakdown}
   `;
@@ -341,11 +287,12 @@ function showMessage(container: HTMLElement, message: string, cls = 'fipe-not-fo
   getResultsContainer(container).innerHTML = `<div class="fipe-alert"><span class="${cls}">${escapeHtml(message)}</span></div>`;
 }
 
-async function renderEvaluation(container: HTMLElement, ctx: LotContext, override?: Parsed) {
-  const parsed = override ?? overrides.get(container) ?? parseDescription(ctx.description);
+async function renderEvaluation(container: HTMLElement, ctx: LotContext, override?: Selection) {
+  const picked = override ?? overrides.get(container);
+  const parsed = picked ? null : parseDescription(ctx.description);
   container.style.borderLeftColor = '';
 
-  if (!parsed) {
+  if (!picked && !parsed) {
     container.dataset.state = 'error';
     showMessage(container, 'Não foi possível interpretar o veículo');
     return;
@@ -361,14 +308,16 @@ async function renderEvaluation(container: HTMLElement, ctx: LotContext, overrid
   const costs = calculate(0, bidValue, settings, extractFeesFromPage(ctx.root));
 
   try {
-    const fipeData = await FipeService.getPrice(parsed.brand, parsed.model, parsed.modelYear, token || undefined);
+    const fipeData = picked
+      ? await FipeService.getPriceByCode(categoryOf(picked.categoryKey), picked.brandCode, picked.modelCode, picked.yearCode, token || undefined)
+      : await FipeService.getPrice(parsed!.brand, parsed!.model, parsed!.modelYear, token || undefined);
     if (container.dataset.run !== run) return; // superseded by a newer render
 
     if (!fipeData) {
       container.dataset.state = 'notfound';
       updateResults(container, costs, null);
       getResultsContainer(container).insertAdjacentHTML('beforeend',
-        `<div class="fipe-alert"><span class="fipe-not-found">FIPE não encontrada para ${escapeHtml(`${parsed.brand} ${parsed.model} (${parsed.modelYear})`)}</span></div>`);
+        `<div class="fipe-alert"><span class="fipe-not-found">FIPE não encontrada para ${escapeHtml(`${parsed!.brand} ${parsed!.model} (${parsed!.modelYear})`)}</span></div>`);
       return;
     }
 
@@ -395,8 +344,8 @@ function openManual(container: HTMLElement) {
   const ctx = contexts.get(container);
   if (!ctx) return;
   void getSettings().then(settings => {
-    showManualModal({ ...parseDescription(ctx.description), ipvaFee: settings.ipvaFee }, async (brand, model, year, ipvaFee) => {
-      const picked = { brand, model, modelYear: year };
+    const input = { detected: parseDescription(ctx.description), initial: overrides.get(container), ipvaFee: settings.ipvaFee };
+    showVehiclePicker(input, async (picked, ipvaFee) => {
       overrides.set(container, picked);
       await setIpvaFee(ipvaFee);
       await renderEvaluation(container, ctx, picked);

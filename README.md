@@ -7,11 +7,12 @@ Extensão para Chrome/Brave/Edge e Firefox (Manifest V3) que consulta a **Tabela
 ## ✨ Funcionalidades
 
 - **Consulta FIPE automática** em cada lote (lista e página de detalhes), com o modelo FIPE encontrado e o mês de referência.
-- **Custos lidos da própria página** (comissão, despesas administrativas, logística, "IPVA pago"); quando o lote não informa, usa os valores configurados no popup.
+- **Custos lidos da própria página** (comissão, despesas administrativas/operacionais, logística, "IPVA pago"); quando o lote não informa, usa os valores configurados no popup.
 - **Cálculo de lucro**: lance + comissão + despesas adm/org/dep + logística + custos extras + ATPV-e + guincho + IPVA (se não pago). Verde = lucro, vermelho = prejuízo.
+- **Lance máximo recomendado**: o maior lance que ainda não dá prejuízo contra a FIPE, já com comissão e todas as despesas (`(FIPE − custos fixos) / (1 + comissão)`, arredondado para baixo no centavo). Mostra a folga sobre o lance atual ou quanto ele já excede; "Inviável" quando os custos fixos superam a FIPE.
 - **Visual moderno**: o lucro estimado em destaque (valor + %), cartões de *Valor FIPE* e *Custo Total*, e o **detalhamento dos custos recolhível** (o estado aberto/fechado é mantido quando o lance atualiza). Chave liga/desliga para a consulta automática, *skeleton* de carregamento, alertas amarelos para erros, modal com foco visível e respeito a `prefers-reduced-motion`. O popup tem tema claro/escuro automático.
 - **Match inteligente**: normaliza acentos, entende abreviações do leilão (`VW`, `GM`, `M.BENZ`, `I/` de importado), mantém cilindrada (`1.0`) e testa as variantes mais parecidas até achar o ano do modelo (±1 ano como fallback). Procura em carros, motos e caminhões.
-- **Modo manual**: desligue a "Consulta automática" ou use **Selecionar veículo** para corrigir marca/modelo/ano e informar o IPVA.
+- **Modo manual / Selecionar veículo**: desligue a "Consulta automática" ou clique em **Selecionar veículo** para escolher o veículo direto na tabela FIPE: **categoria** (carros, motos, caminhões) → **marca** → **modelo** (busca com filtro por vários termos, sem acento e sem diferenciar maiúsculas; mostra até 50 resultados e informa o total) → **ano** (os anos reais daquele modelo). Já abre preenchido com o que foi detectado no lote, funciona só com o teclado (↑ ↓ Home End Enter Esc, foco preso no diálogo) e a consulta usa os códigos FIPE exatos. Também informa o IPVA.
 - **Erros tratados**: "FIPE não encontrada" (mostra só os custos, sem lucro falso), limite da API excedido e falta de conexão, ambos com **Tentar novamente**.
 - **Popup de configurações** com atualização imediata nas abas abertas.
 
@@ -63,15 +64,17 @@ ATPV-e é fixo em R$ 40,00. O IPVA é informado em **Selecionar veículo** e só
 | `pnpm build` / `pnpm watch` | Compila com tsup para `dist/` |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm test` | Testes unitários (vitest). `LIVE=1 pnpm test` também consulta as APIs reais |
-| `pnpm test:e2e` | Build + Playwright: carrega a extensão num Chromium real e exercita lista, detalhe, popup, erros e modo manual. `LIVE=1` inclui um teste com as APIs reais. Gera os prints em `docs/screenshots/` |
+| `pnpm test:e2e` | Build + Playwright: carrega a extensão num Chromium real e exercita lista, detalhe, popup, erros, seletor de veículo e lance máximo. `LIVE=1` inclui um teste com as APIs reais. Gera os prints em `docs/screenshots/` |
 | `pnpm lint:ext` | `web-ext lint` do build |
 | `pnpm dev` | Firefox com web-ext |
 
-Estrutura: `src/content_script.ts` (UI nas páginas), `src/fipe_service.ts` (consulta/match), `src/lib.ts` (parse e cálculo), `src/settings.ts` (storage), `src/popup.*`, `e2e/` (fixtures e testes).
+Estrutura: `src/content_script.ts` (UI nas páginas), `src/vehicle_picker.ts` + `src/combobox.ts` + `src/search.ts` (seletor de veículo), `src/fipe_service.ts` (consulta/match/catálogo), `src/lib.ts` (parse e cálculo), `src/settings.ts` (storage), `src/popup.*`, `e2e/` (fixtures e testes).
 
 ## ✅ Homologação
 
-Resultado da última rodada (Chromium 141 headless com a extensão carregada): **30 testes unitários + 11 e2e passando** (+1 e2e e 4 unitários contra as APIs reais com `LIVE=1`). O site do leilão bloqueia acesso automatizado (HTTP 403), então os testes usam páginas-fixture que reproduzem os seletores esperados (`.cardLote-descVeic`, `#hdMaiorLance`, `ul.small.text-secondary`); **valide uma vez em um lote real** após instalar. Firefox foi validado apenas com `web-ext lint` (0 erros).
+Última rodada (Chromium do Playwright, headless, com a extensão carregada): **57 testes unitários + 17 e2e passando** (+4 unitários e 1 e2e contra as APIs reais com `LIVE=1`). No Windows o e2e do popup falha só porque `e2e/fixtures.ts` deriva o ID da extensão como no Linux; use `CHROME_PATH` apontando para o Chromium do Playwright.
+
+**Lotes reais** (leilão 8120, lotes 3, 4 e 8, página de detalhe, APIs FIPE reais, 3 execuções completas): 87 verificações, todas OK. Cobrem lance/comissão/despesas lidos da própria página, aritmética do detalhamento e do lance máximo recalculada de forma independente, ausência de deriva em 10 s, resultado idêntico em contexto novo, seletor (pré-preenchimento, busca, teclado, categoria, Esc) em 1280 px e 375 px. Dois defeitos só apareceram aí e estão cobertos por teste: "Despesas **operacionais**" (o site usa essa palavra em alguns leilões) e a extensão ler o próprio painel como lance quando o lote não tem lances ("Aguardando lances": vale o *Lance Inicial*). Firefox: `web-ext lint` com 0 erros.
 
 ---
 Licença ISC.

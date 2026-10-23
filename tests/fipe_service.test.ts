@@ -47,6 +47,83 @@ describe('FipeService.normalize', () => {
   });
 });
 
+describe('FipeService catalog (picker data)', () => {
+  const cars = FipeService.CATEGORIES[0];
+
+  it('lists brands and models with trimmed names, dropping malformed entries', async () => {
+    mockApi({ '/marcas/v1/carros': () => new Response(JSON.stringify([{ nome: ' Fiat ', valor: '21' }, { nome: '', valor: '1' }, null]), { status: 200 }) });
+    expect(await FipeService.listBrands(cars)).toEqual([{ name: 'Fiat', code: '21' }]);
+    FipeService.clearCache();
+    mockApi();
+    expect((await FipeService.listModels(cars, '21'))[1]).toEqual({ name: 'Uno Mille 1.0', code: '101' });
+  });
+
+  it('lists years newest first', async () => {
+    mockApi();
+    const years = await FipeService.listYears(cars, '21', '100');
+    expect(years.map(y => y.code)).toEqual(['2010-1', '2009-1', '2008-1']);
+  });
+
+  it('prices an exact selection without any name matching', async () => {
+    const calls = mockApi();
+    const r = await FipeService.getPriceByCode(cars, '21', '102', '2009-1');
+    expect(r.model).toBe('M102');
+    expect(calls.some(u => u.includes('/veiculos/'))).toBe(false);
+  });
+
+  it('resolves an auction description to category, brand and best model', async () => {
+    mockApi();
+    expect(await FipeService.resolveVehicle('VW', 'GOL 1.6')).toMatchObject({ category: { brasil: 'carros' }, brandCode: '59', modelCode: '201' });
+    expect(await FipeService.resolveVehicle('HONDA', 'CG 160 FAN')).toMatchObject({ category: { brasil: 'motos' }, modelCode: '900' });
+  });
+
+  it('keeps the brand when the model is unknown, and returns null for unknown brands', async () => {
+    mockApi();
+    expect(await FipeService.resolveVehicle('FIAT', 'NAVE ESPACIAL')).toMatchObject({ brandCode: '21', modelCode: null });
+    expect(await FipeService.resolveVehicle('XPTO', 'UNO')).toBeNull();
+  });
+
+  describe('resolveVehicle with a model year (picker prefill must agree with the automatic lookup)', () => {
+    const only2015 = () => new Response(JSON.stringify([{ code: '2015-1', name: '2015 Gasolina' }]), { status: 200 });
+
+    it('walks the ranked variants until one has the year, instead of trusting the top-ranked name', async () => {
+      mockApi({ '/models/101/years': only2015 }); // best-ranked "Uno Mille 1.0" has no 2009
+      expect(await FipeService.resolveVehicle('FIAT', 'UNO MILLE', 2009)).toMatchObject({ modelCode: '100', yearCode: '2009-1' });
+    });
+
+    it('lands on the same vehicle getPrice prices', async () => {
+      mockApi({ '/models/101/years': only2015 });
+      const hit = await FipeService.resolveVehicle('FIAT', 'UNO MILLE', 2009);
+      const priced = await FipeService.getPrice('FIAT', 'UNO MILLE', 2009);
+      expect(`M${hit?.modelCode}`).toBe(priced?.model);
+    });
+
+    it('falls back to the adjacent year', async () => {
+      mockApi();
+      expect(await FipeService.resolveVehicle('FIAT', 'UNO MILLE', 2011)).toMatchObject({ yearCode: '2010-1' });
+    });
+
+    it('keeps brand and model when the years endpoint fails (BrasilAPI still serves them)', async () => {
+      mockApi({ '/years': () => new Response('{}', { status: 429 }) });
+      const hit = await FipeService.resolveVehicle('FIAT', 'UNO MILLE', 2009);
+      expect(hit).toMatchObject({ brandCode: '21', modelCode: '101' });
+      expect(hit?.yearCode).toBeUndefined();
+    });
+
+    it('still returns brand and best model, without a year, when no variant has it', async () => {
+      mockApi();
+      const hit = await FipeService.resolveVehicle('FIAT', 'UNO MILLE', 1990);
+      expect(hit).toMatchObject({ brandCode: '21', modelCode: '101' });
+      expect(hit?.yearCode).toBeUndefined();
+    });
+  });
+
+  it('surfaces rate limiting on the years endpoint', async () => {
+    mockApi({ '/years': () => new Response('{}', { status: 429 }) });
+    await expect(FipeService.listYears(cars, '21', '100')).rejects.toMatchObject({ kind: 'rate-limit' });
+  });
+});
+
 describe('FipeService.getPrice', () => {
   it('finds exact year using real API field names (modelo/valor, code, price)', async () => {
     mockApi();

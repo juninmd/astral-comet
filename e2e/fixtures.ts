@@ -61,15 +61,35 @@ export const detailPage = (l: Lot) => `<!doctype html><html lang="pt-BR"><head><
   <ul class="small text-secondary">${l.fees ?? defaultFees}</ul>
 </div></div></main></body></html>`;
 
+/** Detail page of a lot nobody bid on yet, shaped like the live site (initial bid box + empty "Maior lance"). */
+export const detailPageNoBids = (l: Lot) => `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Lote</title>
+<style>body{font-family:sans-serif;background:#f4f4f4}.col-md-8{width:600px}.card{background:#fff;padding:12px;border-radius:6px;margin-bottom:8px}.row{display:flex}.col-6{width:50%}</style></head>
+<body><main><div class="col-md-8"><div class="card">
+  <h2>Detalhes do lote (fixture)</h2>
+  <div style="text-align:justify">${l.desc}</div>
+  <ul class="small text-secondary">${l.fees ?? defaultFees}</ul>
+</div>
+<div class="card"><div class="row">
+  <div class="col-6 text-center"><div class="fw-bold text-warning">${money(l.bid)}</div><small>Lance Inicial</small></div>
+  <div class="col-6 text-center"><div class="fw-bold text-warning">R$ 500,00</div><small>Incremento Mínimo</small></div>
+</div></div>
+<div class="card"><div class="card-body small"><div>Maior lance:</div>
+  <div id="dvMaiorLance"><input type="hidden" id="hdMaiorLance" value="0" />Aguardando lances</div></div></div>
+</div></main></body></html>`;
+
 // ---- FIPE API mock (shapes copied from the real BrasilAPI / FIPE v2 responses) ----
 export interface ApiMode { price429?: boolean; offline?: boolean; calls: string[] }
 
 const brands = [{ nome: 'Fiat', valor: '21' }, { nome: 'VW - VolksWagen', valor: '59' }, { nome: 'GM - Chevrolet', valor: '23' }];
 const models: Record<string, { modelo: string; valor: string }[]> = {
-  '21': [{ modelo: 'Uno Mille Economy 1.0 Fire Flex 8V 4p', valor: '100' }],
+  '21': [{ modelo: 'Uno Mille Economy 1.0 Fire Flex 8V 4p', valor: '100' }, { modelo: 'Uno Way 1.4 Evo Flex 8V 4p', valor: '103' }, { modelo: 'Palio Fire 1.0', valor: '102' }],
   '59': [{ modelo: 'Gol City 1.0 Flex 8V 4p', valor: '200' }],
+  '23': Array.from({ length: 120 }, (_, i) => ({ modelo: `Onix Série ${i + 1}`, valor: String(300 + i) })), // more than the dropdown cap
 };
-export const FIPE_PRICES: Record<string, number> = { '100': 20000, '200': 40000 };
+const motoBrands = [{ nome: 'HONDA', valor: '80' }];
+const motoModels = [{ modelo: 'CG 160 Fan', valor: '900' }];
+export const FIPE_PRICES: Record<string, number> = { '100': 20000, '103': 25000, '200': 40000, '900': 12000 };
+const modelName = (id: string) => [...models['21'], ...models['59'], ...motoModels].find(m => m.valor === id)?.modelo ?? `Modelo ${id}`;
 
 export async function mockApis(context: BrowserContext, mode: ApiMode) {
   const json = (route: Route, body: unknown, status = 200) =>
@@ -81,14 +101,16 @@ export async function mockApis(context: BrowserContext, mode: ApiMode) {
     if (mode.offline) return route.abort('failed');
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' } });
     if (url.endsWith('/marcas/v1/carros')) return json(route, brands);
-    if (url.endsWith('/marcas/v1/motos') || url.endsWith('/marcas/v1/caminhoes')) return json(route, []);
+    if (url.endsWith('/marcas/v1/motos')) return json(route, motoBrands);
+    if (url.endsWith('/marcas/v1/caminhoes')) return json(route, []);
+    if (/veiculos\/v1\/motos\/80$/.test(url)) return json(route, motoModels);
     let m = url.match(/veiculos\/v1\/carros\/(\d+)$/);
     if (m) return json(route, models[m[1]] ?? []);
     if (/\/years/.test(url) && mode.price429) return json(route, { error: 'limite de taxa excedido' }, 429);
     m = url.match(/models\/(\d+)\/years$/);
     if (m) return json(route, [{ code: '2009-1', name: '2009 Gasolina' }, { code: '2013-1', name: '2013 Gasolina' }]);
     m = url.match(/models\/(\d+)\/years\/(\d+)-1$/);
-    if (m) return json(route, { vehicleType: 1, price: money(FIPE_PRICES[m[1]]), brand: 'X', model: m[1] === '100' ? 'Uno Mille Economy 1.0 Fire Flex 8V 4p' : 'Gol City 1.0 Flex 8V 4p', modelYear: Number(m[2]), fuel: 'Gasolina', codeFipe: '001124-0', referenceMonth: 'outubro de 2026', fuelAcronym: 'G' });
+    if (m) return json(route, { vehicleType: 1, price: money(FIPE_PRICES[m[1]] ?? 10000), brand: 'X', model: modelName(m[1]), modelYear: Number(m[2]), fuel: 'Gasolina', codeFipe: '001124-0', referenceMonth: 'outubro de 2026', fuelAcronym: 'G' });
     return json(route, {}, 404);
   });
 }

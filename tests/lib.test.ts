@@ -57,6 +57,31 @@ describe('calculate', () => {
   it('negative profit when FIPE is lower than the cost', () => {
     expect(calculate(5000, 10000, fees).profit).toBeLessThan(0);
   });
+  describe('maxBid (highest bid that still breaks even)', () => {
+    it('solves bid × (1 + commission) + fixed costs = FIPE, rounded down to the cent', () => {
+      // (30000 − (1900+1416+40+1500)) / 1.05 = 23946.666…
+      expect(calculate(30000, 10000, fees).maxBid).toBe(23946.66);
+    });
+    it('never loses money: profit is ≥ 0 at maxBid and < 0 one cent above', () => {
+      const { maxBid } = calculate(30000, 0, fees);
+      expect(calculate(30000, maxBid, fees).profit).toBeGreaterThanOrEqual(0);
+      expect(calculate(30000, maxBid + 0.01, fees).profit).toBeLessThan(0);
+    });
+    it('does not depend on the current bid', () => {
+      expect(calculate(30000, 99999, fees).maxBid).toBe(calculate(30000, 1, fees).maxBid);
+    });
+    it('follows page fees and unpaid IPVA', () => {
+      const r = calculate(30000, 0, { ...fees, ipvaFee: 800 }, { commissionRate: 0.1, adminFee: 0, logisticsFee: 0 });
+      // (30000 − (0+0+40+1500+800)) / 1.1
+      expect(r.maxBid).toBe(25145.45);
+    });
+    it('is 0 (not negative) when fixed costs alone exceed FIPE', () => {
+      expect(calculate(3000, 0, fees).maxBid).toBe(0);
+    });
+    it('is 0 when there is no FIPE value', () => {
+      expect(calculate(0, 5000, fees).maxBid).toBe(0);
+    });
+  });
   it('zero bid and zero fees does not divide by zero', () => {
     const zero: Fees = { towing: 0, extraCosts: 0, adminFee: 0, logisticsFee: 0, atpvFee: 0, commissionRate: 0, ipvaFee: 0 };
     expect(calculate(1000, 0, zero).profitPercentage).toBe(0);

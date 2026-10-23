@@ -22,6 +22,8 @@ export interface CalculationResult {
   towing: number;
   ipvaFee: number;
   totalCost: number;
+  /** Highest bid that still yields no loss against FIPE (0 when none does). */
+  maxBid: number;
   profit: number;
   profitPercentage: number;
 }

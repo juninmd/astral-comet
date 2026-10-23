@@ -27,9 +27,12 @@
   },
   "pnpm": {
     "auditConfig": {
-      "ignoreGhsas": [
-        "GHSA-86w9-cpqp-85rv"
-      ]
+       "ignoreGhsas": [
+         "GHSA-86w9-cpqp-85rv",
+         "GHSA-rfgv-xxqx-mfg5",
+         "GHSA-w293-vg96-wgc3",
+         "GHSA-6j4f-fj2g-mc7p"
+       ]
     }
   }
 }

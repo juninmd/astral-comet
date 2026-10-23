@@ -1,72 +1,31 @@
-import { FipeService } from './fipe_service';
+import { FipeError, FipeService } from './fipe_service';
 import { CalculationResult } from './types';
+import { calculate, CURRENCY_PATTERN, extractCurrency, PageFees, parseCurrency, parseDescription } from './lib';
+import { getAutoLookupEnabled, getSettings, getToken, setStored, AUTO_LOOKUP_KEY } from './settings';
 
 const VEHICLE_DESCRIPTION_PATTERN = /(?:[^/\s,]+\/)?[^/,]+\/[^,]+,\s*\d{2}\/\d{2}/i;
-const CURRENCY_PATTERN = /R\$\s*[\d.]+,\d{2}/i;
 const DETAIL_PANEL_ID = 'fipe-detail-helper';
-const AUTO_LOOKUP_KEY = 'astralCometAutoLookup';
-const COMMISSION_PATTERN = /(\d+(?:\.\d+)?)\s*%\s*(?:referente à comissão|comissão do leiloeiro)/i;
+const COLOR_GOOD = '#059669';
+const COLOR_BAD = '#dc2626';
+const COMMISSION_PATTERN = /(\d+(?:[.,]\d+)?)\s*%\s*(?:referente à comissão|comissão do leiloeiro)/i;
 const ADMIN_FEE_PATTERN = /Despesas administrativas[^,]*?(?:Organização e Depósito)?[^,]*?no valor de\s*(R\$\s*[\d.]+,\d{2})/i;
 const LOGISTICS_FEE_PATTERN = /Despesas de logística[^,]*?no valor de\s*(R\$\s*[\d.]+,\d{2})/i;
 
-const DEFAULT_TOWING = 1500;
-const DEFAULT_EXTRA_COSTS = 0;
-const DEFAULT_ADMIN_FEE = 1900;
-const DEFAULT_ATPV_FEE = 40;
-const DEFAULT_COMMISSION_RATE = 5;
-const DEFAULT_IPVA_FEE = 0;
-
-async function getSettings(): Promise<{ towing: number; extraCosts: number; adminFee: number; logisticsFee: number; atpvFee: number; commissionRate: number; ipvaFee: number }> {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(['towing', 'extraCosts', 'adminFee', 'logisticsFee', 'atpvFee', 'commissionRate', 'ipvaFee'], (result) => {
-      resolve({
-        towing: (result.towing as number) ?? DEFAULT_TOWING,
-        extraCosts: (result.extraCosts as number) ?? DEFAULT_EXTRA_COSTS,
-        adminFee: (result.adminFee as number) ?? DEFAULT_ADMIN_FEE,
-        logisticsFee: (result.logisticsFee as number) ?? 0,
-        atpvFee: (result.atpvFee as number) ?? DEFAULT_ATPV_FEE,
-        commissionRate: (result.commissionRate as number) ?? DEFAULT_COMMISSION_RATE / 100,
-        ipvaFee: (result.ipvaFee as number) ?? DEFAULT_IPVA_FEE,
-      });
-    });
-  });
-}
-
-async function getAutoLookupEnabled(): Promise<boolean> {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get([AUTO_LOOKUP_KEY], (result) => {
-      if (typeof result[AUTO_LOOKUP_KEY] === 'boolean') {
-        resolve(result[AUTO_LOOKUP_KEY]);
-      } else {
-        resolve(true);
-      }
-    });
-  });
-}
-
-async function setAutoLookupEnabled(enabled: boolean): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.sync.set({ [AUTO_LOOKUP_KEY]: enabled }, () => resolve());
-  });
-}
-
 async function setIpvaFee(value: number): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.sync.set({ ipvaFee: value }, () => resolve());
-  });
+  return setStored({ ipvaFee: value });
 }
 
 const IPVA_PAID_PATTERN = /IPVA\s*\d{0,4}\s*PAGO/i;
 
-async function extractFeesFromPage(): Promise<{ adminFee?: number; logisticsFee?: number; commissionRate?: number; ipvaPaid?: boolean }> {
-  const result: { adminFee?: number; logisticsFee?: number; commissionRate?: number; ipvaPaid?: boolean } = {};
+function extractFeesFromPage(root: ParentNode = document): PageFees {
+  const result: PageFees = {};
 
-  const bodyText = document.body?.textContent || '';
+  const bodyText = (root instanceof Document ? root.body : (root as Element))?.textContent || '';
   if (IPVA_PAID_PATTERN.test(bodyText)) {
     result.ipvaPaid = true;
   }
 
-  const lists = document.querySelectorAll('ul.small.text-secondary');
+  const lists = root.querySelectorAll('ul.small.text-secondary');
   for (let i = 0; i < lists.length; i++) {
     const text = lists[i].textContent || '';
 
@@ -76,7 +35,7 @@ async function extractFeesFromPage(): Promise<{ adminFee?: number; logisticsFee?
 
     const commissionMatch = text.match(COMMISSION_PATTERN);
     if (commissionMatch) {
-      const rate = parseFloat(commissionMatch[1]) / 100;
+      const rate = parseFloat(commissionMatch[1].replace(',', '.')) / 100;
       if (!Number.isNaN(rate)) {
         result.commissionRate = rate;
       }
@@ -105,31 +64,6 @@ function isVisible(element: Element): boolean {
   return Boolean(htmlElement.offsetWidth || htmlElement.offsetHeight || htmlElement.getClientRects().length);
 }
 
-function extractCurrency(text: string): string | null {
-  return text.match(CURRENCY_PATTERN)?.[0] || null;
-}
-
-function parseCurrency(text: string): number {
-  const currency = extractCurrency(text) || text;
-  const normalized = currency
-    .replace(/[^\d,.-]/g, '')
-    .replace(/\./g, '')
-    .replace(',', '.');
-
-  return normalized ? parseFloat(normalized) : 0;
-}
-
-function parseDescription(description: string): { brand: string; model: string; modelYear: number } | null {
-  const match = description.match(/^(?:[^/]+\/)?([^/]+)\/(.+?),\s*(\d{2})\/(\d{2})/);
-  if (!match) return null;
-
-  return {
-    brand: match[1].trim(),
-    model: match[2].trim(),
-    modelYear: parseInt(`20${match[4]}`, 10),
-  };
-}
-
 function findElementsByText(root: ParentNode, pattern: RegExp): HTMLElement[] {
   const matches: HTMLElement[] = [];
 
@@ -154,16 +88,26 @@ function findElementsByText(root: ParentNode, pattern: RegExp): HTMLElement[] {
   return matches;
 }
 
-function findDescriptionElement(root: ParentNode): HTMLElement | null {
-  const selectorCandidates = [
-    '.cardLote-descVeic',
-    '[class*="descVeic"]',
-    '[class*="Descricao"]',
-    '[class*="descricao"]',
-    'div[style*="text-align:justify"]',
-  ];
+const DESCRIPTION_SELECTORS = [
+  '.cardLote-descVeic',
+  '[class*="descVeic"]',
+  '[class*="Descricao"]',
+  '[class*="descricao"]',
+  'div[style*="text-align:justify"]',
+];
 
-  for (const selector of selectorCandidates) {
+/** Number of distinct vehicle descriptions inside a node (including the node itself). */
+function countDescriptions(root: HTMLElement): number {
+  const found = new Set<Element>();
+  const candidates = [...(root.matches(DESCRIPTION_SELECTORS.join(',')) ? [root] : []), ...root.querySelectorAll(DESCRIPTION_SELECTORS.join(','))];
+  for (const el of candidates) {
+    if (VEHICLE_DESCRIPTION_PATTERN.test(getTextContent(el))) found.add(el);
+  }
+  return found.size;
+}
+
+function findDescriptionElement(root: ParentNode): HTMLElement | null {
+  for (const selector of DESCRIPTION_SELECTORS) {
     const elements = root.querySelectorAll(selector);
     for (let index = 0; index < elements.length; index += 1) {
       const text = getTextContent(elements[index]);
@@ -209,10 +153,6 @@ function createManualModal() {
   return overlay;
 }
 
-function closeManualModal(overlay: HTMLElement) {
-  overlay.remove();
-}
-
 function showManualModal(
   defaults: { brand?: string; model?: string; modelYear?: number; ipvaFee?: number } | null,
   onSubmit: (brand: string, model: string, year: number, ipvaFee: number) => void
@@ -254,69 +194,6 @@ function showManualModal(
   };
 
   document.addEventListener('keydown', onKeyDown);
-}
-
-async function renderWithMode(container: HTMLElement, description: string, bidText: string) {
-  const auto = await getAutoLookupEnabled();
-  const settings = await getSettings();
-  const controls = container.querySelector<HTMLElement>('.fipe-controls');
-  if (!controls) return;
-
-  controls.innerHTML = '';
-
-  const toggleLabel = document.createElement('label');
-  toggleLabel.className = 'fipe-toggle';
-  const toggle = document.createElement('input');
-  toggle.type = 'checkbox';
-  toggle.checked = auto;
-  toggleLabel.appendChild(toggle);
-  toggleLabel.appendChild(document.createTextNode('Consulta automática'));
-
-  const manualButton = document.createElement('button');
-  manualButton.type = 'button';
-  manualButton.className = 'fipe-manual-btn';
-  manualButton.textContent = 'Selecionar veículo';
-
-  toggle.addEventListener('change', async () => {
-    await setAutoLookupEnabled(toggle.checked);
-    scanPage();
-  });
-
-  manualButton.addEventListener('click', () => {
-    const parsed = parseDescription(description);
-    showManualModal({ ...parsed, ipvaFee: settings.ipvaFee }, async (brand, model, year, ipvaFee) => {
-      await setIpvaFee(ipvaFee);
-      await renderEvaluation(container, description, bidText, { brand, model, modelYear: year });
-    });
-  });
-
-  controls.appendChild(toggleLabel);
-  controls.appendChild(manualButton);
-
-  if (auto) {
-    await renderEvaluation(container, description, bidText);
-  } else {
-    const parsed = parseDescription(description);
-    const resultsEl = getResultsContainer(container);
-    resultsEl.innerHTML = `
-      <div class="fipe-row">
-        <span class="fipe-label">Modo manual:</span>
-        <span class="fipe-value">${parsed ? `${parsed.brand} / ${parsed.model} (${parsed.modelYear})` : 'Nenhum veículo detectado'}</span>
-      </div>
-      <div class="fipe-row">
-        <span class="fipe-label"></span>
-        <button class="fipe-manual-open">Abrir seleção</button>
-      </div>
-    `;
-
-    const openBtn = resultsEl.querySelector<HTMLButtonElement>('.fipe-manual-open');
-    openBtn?.addEventListener('click', () => {
-      showManualModal({ ...parsed, ipvaFee: settings.ipvaFee }, async (brand, model, year, ipvaFee) => {
-        await setIpvaFee(ipvaFee);
-        await renderEvaluation(container, description, bidText, { brand, model, modelYear: year });
-      });
-    });
-  }
 }
 
 function findBidText(root: ParentNode): string {
@@ -389,135 +266,211 @@ function getResultsContainer(container: HTMLElement): HTMLElement {
   return container.querySelector<HTMLElement>('.fipe-results') ?? container;
 }
 
-function updateResults(container: HTMLElement, results: CalculationResult) {
-  const formatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-  const isPositive = results.profit > 0;
-  const resultsEl = getResultsContainer(container);
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]!));
+}
 
-  container.style.borderLeftColor = isPositive ? '#00c853' : '#ff5252';
+interface LotContext {
+  root: ParentNode;
+  description: string;
+  bidText: string;
+}
+
+type Parsed = { brand: string; model: string; modelYear: number };
+
+const contexts = new WeakMap<HTMLElement, LotContext>();
+// Vehicle picked manually for a lot; survives re-renders until the lot's description changes.
+const overrides = new WeakMap<HTMLElement, Parsed>();
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+function row(label: string, value: string, extra = ''): string {
+  return `<div class="fipe-row"${extra}><span class="fipe-label">${label}</span><span class="fipe-value">${value}</span></div>`;
+}
+
+function stat(label: string, value: string): string {
+  return `<div class="fipe-stat"><span class="fipe-label">${label}</span><span class="fipe-value">${value}</span></div>`;
+}
+
+function updateResults(container: HTMLElement, results: CalculationResult, fipe: { value: number; model: string; reference: string } | null) {
+  const resultsEl = getResultsContainer(container);
+  const pct = Number((results.commissionRate * 100).toFixed(2)).toLocaleString('pt-BR');
+  const wasOpen = container.dataset.detailsOpen === 'true';
+
+  const breakdown = `
+    <details class="fipe-details"${wasOpen ? ' open' : ''}>
+      <summary>Detalhamento dos custos</summary>
+      ${[
+        row('Lance (Maior/Inicial):', brl.format(results.bidValue)),
+        row(`Comissão Leiloeiro (${pct}%):`, brl.format(results.commission)),
+        row('Despesas Adm/Org/Dep:', brl.format(results.adminFee)),
+        row('Despesas Logística:', brl.format(results.logisticsFee)),
+        row('Custos Extras:', brl.format(results.extraCosts)),
+        row('ATPV-e:', brl.format(results.atpvFee)),
+        row('Guincho (Est.):', brl.format(results.towing)),
+        results.ipvaFee > 0 ? row('IPVA (não pago):', brl.format(results.ipvaFee)) : '',
+      ].join('')}
+    </details>`;
+
+  if (!fipe) {
+    container.style.borderLeftColor = '';
+    resultsEl.innerHTML = `<div class="fipe-stats">${stat('Lance', brl.format(results.bidValue))}${stat('Custo Total', brl.format(results.totalCost))}</div>${breakdown}`;
+    return;
+  }
+
+  const isPositive = results.profit > 0;
+  const tone = isPositive ? '' : ' negative';
+  container.style.borderLeftColor = isPositive ? COLOR_GOOD : COLOR_BAD;
   resultsEl.innerHTML = `
-    <div class="fipe-row">
-      <span class="fipe-label">Lance (Maior/Inicial):</span>
-      <span class="fipe-value">${formatter.format(results.bidValue)}</span>
-    </div>
-    <div class="fipe-row">
-      <span class="fipe-label">Comissão Leiloeiro (5%):</span>
-      <span class="fipe-value">${formatter.format(results.commission)}</span>
-    </div>
-    <div class="fipe-row">
-      <span class="fipe-label">Despesas Adm/Org/Dep:</span>
-      <span class="fipe-value">${formatter.format(results.adminFee)}</span>
-    </div>
-    <div class="fipe-row">
-      <span class="fipe-label">Despesas Logística:</span>
-      <span class="fipe-value">${formatter.format(results.logisticsFee)}</span>
-    </div>
-    <div class="fipe-row">
-      <span class="fipe-label">Custos Extras:</span>
-      <span class="fipe-value">${formatter.format(results.extraCosts)}</span>
-    </div>
-    <div class="fipe-row">
-      <span class="fipe-label">ATPV-e:</span>
-      <span class="fipe-value">${formatter.format(results.atpvFee)}</span>
-    </div>
-    <div class="fipe-row">
-      <span class="fipe-label">Guincho (Est.):</span>
-      <span class="fipe-value">${formatter.format(results.towing)}</span>
-    </div>
-    ${results.ipvaFee > 0 ? `
-      <div class="fipe-row">
-        <span class="fipe-label">IPVA (não pago):</span>
-        <span class="fipe-value">${formatter.format(results.ipvaFee)}</span>
+    <div class="fipe-hero${tone}">
+      <span class="fipe-label">Lucro Estimado</span>
+      <div class="fipe-profit${tone}">
+        <span class="fipe-value">${brl.format(results.profit)}</span>
+        <span class="fipe-badge${tone}">${results.profitPercentage.toFixed(1)}%</span>
       </div>
-    ` : ''}
-    <div class="fipe-row" style="font-weight:700">
-      <span class="fipe-label">Custo Total:</span>
-      <span class="fipe-value">${formatter.format(results.totalCost)}</span>
     </div>
-    <div class="fipe-row" style="margin-top:8px;border-top:1px solid #ccc;padding-top:8px">
-      <span class="fipe-label">Valor FIPE (Opcional):</span>
-      <span class="fipe-value">${formatter.format(results.fipeValue)}</span>
+    <div class="fipe-stats">
+      ${stat('Valor FIPE', brl.format(fipe.value))}
+      ${stat('Custo Total', brl.format(results.totalCost))}
     </div>
-    <div class="fipe-profit ${isPositive ? '' : 'negative'}">
-      <span class="fipe-label">Lucro Estimado:</span>
-      <span class="fipe-value">${formatter.format(results.profit)}</span>
-      <span class="fipe-badge ${isPositive ? '' : 'negative'}">${results.profitPercentage.toFixed(1)}%</span>
-    </div>
+    <span class="fipe-fipe-model">${escapeHtml(fipe.model)} · ${escapeHtml(fipe.reference)}</span>
+    ${breakdown}
   `;
 }
 
-async function calculateProfit(fipe: number, bid: number): Promise<CalculationResult> {
-  const settings = await getSettings();
-  const pageFees = await extractFeesFromPage();
-
-  const commissionRate = pageFees.commissionRate ?? settings.commissionRate;
-  const commission = bid * commissionRate;
-  const adminFee = pageFees.adminFee ?? settings.adminFee;
-  const logisticsFee = pageFees.logisticsFee ?? settings.logisticsFee;
-
-  const ipvaPaid = pageFees.ipvaPaid ?? false;
-  const ipvaCost = ipvaPaid ? 0 : settings.ipvaFee;
-
-  const totalCost = bid + commission + adminFee + logisticsFee + settings.extraCosts + settings.atpvFee + settings.towing + ipvaCost;
-  const profit = fipe - totalCost;
-  const profitPercentage = totalCost > 0 ? (profit / totalCost) * 100 : 0;
-
-  return {
-    fipeValue: fipe,
-    bidValue: bid,
-    commission,
-    adminFee,
-    logisticsFee,
-    extraCosts: settings.extraCosts,
-    atpvFee: settings.atpvFee,
-    towing: settings.towing,
-    ipvaFee: ipvaCost,
-    totalCost,
-    profit,
-    profitPercentage,
-  };
+function showMessage(container: HTMLElement, message: string, cls = 'fipe-not-found') {
+  getResultsContainer(container).innerHTML = `<div class="fipe-alert"><span class="${cls}">${escapeHtml(message)}</span></div>`;
 }
 
-async function renderEvaluation(
-  container: HTMLElement,
-  description: string,
-  bidText: string,
-  overrideParsed?: { brand: string; model: string; modelYear: number }
-) {
-  const parsed = overrideParsed ?? parseDescription(description);
-  const resultsEl = getResultsContainer(container);
+async function renderEvaluation(container: HTMLElement, ctx: LotContext, override?: Parsed) {
+  const parsed = override ?? overrides.get(container) ?? parseDescription(ctx.description);
+  container.style.borderLeftColor = '';
 
   if (!parsed) {
-    resultsEl.innerHTML = '<div class="fipe-row"><span class="fipe-label fipe-not-found">Não foi possível interpretar o veículo</span></div>';
+    container.dataset.state = 'error';
+    showMessage(container, 'Não foi possível interpretar o veículo');
     return;
   }
 
-  const bidValue = parseCurrency(bidText);
-  const cacheKey = `${parsed.brand}|${parsed.model}|${parsed.modelYear}|${bidValue}`;
-  if (container.dataset.cacheKey === cacheKey && container.dataset.state === 'done') {
-    return;
-  }
-
-  if (container.dataset.state === 'loading' && container.dataset.cacheKey === cacheKey) {
-    return;
-  }
-
+  const run = String(Number(container.dataset.run ?? '0') + 1);
+  container.dataset.run = run;
   container.dataset.state = 'loading';
-  container.dataset.cacheKey = cacheKey;
-  resultsEl.innerHTML = '<div class="fipe-row fipe-loading"><span class="fipe-label">Consultando FIPE...</span></div>';
+  getResultsContainer(container).innerHTML = '<div class="fipe-loading"><div class="fipe-skeleton"><span class="fipe-label">Consultando FIPE...</span><i></i><i></i></div></div>';
 
-  const fipeData = await FipeService.getPrice(parsed.brand, parsed.model, parsed.modelYear);
+  const bidValue = parseCurrency(ctx.bidText);
+  const [settings, token] = await Promise.all([getSettings(), getToken()]);
+  const costs = calculate(0, bidValue, settings, extractFeesFromPage(ctx.root));
 
-  if (!fipeData) {
-    const results = await calculateProfit(0, bidValue);
-    updateResults(container, results);
+  try {
+    const fipeData = await FipeService.getPrice(parsed.brand, parsed.model, parsed.modelYear, token || undefined);
+    if (container.dataset.run !== run) return; // superseded by a newer render
+
+    if (!fipeData) {
+      container.dataset.state = 'notfound';
+      updateResults(container, costs, null);
+      getResultsContainer(container).insertAdjacentHTML('beforeend',
+        `<div class="fipe-alert"><span class="fipe-not-found">FIPE não encontrada para ${escapeHtml(`${parsed.brand} ${parsed.model} (${parsed.modelYear})`)}</span></div>`);
+      return;
+    }
+
+    const fipeValue = parseCurrency(fipeData.price);
+    const results = calculate(fipeValue, bidValue, settings, extractFeesFromPage(ctx.root));
+    updateResults(container, results, { value: fipeValue, model: fipeData.model, reference: fipeData.referenceMonth });
+    container.dataset.state = 'done';
+  } catch (e) {
+    if (container.dataset.run !== run) return;
+    container.dataset.state = 'error';
+    updateResults(container, costs, null);
+    const message = e instanceof FipeError && e.kind === 'rate-limit'
+      ? 'Limite da API FIPE excedido. Tente mais tarde ou informe um token no popup.'
+      : 'Não foi possível consultar a FIPE. Verifique sua conexão.';
+    getResultsContainer(container).insertAdjacentHTML('beforeend',
+      `<div class="fipe-alert"><span class="fipe-not-found">${escapeHtml(message)}</span><button type="button" class="fipe-retry">Tentar novamente</button></div>`);
+    container.querySelector<HTMLButtonElement>('.fipe-retry')?.addEventListener('click', () => {
+      void renderEvaluation(container, ctx, override);
+    });
+  }
+}
+
+function openManual(container: HTMLElement) {
+  const ctx = contexts.get(container);
+  if (!ctx) return;
+  void getSettings().then(settings => {
+    showManualModal({ ...parseDescription(ctx.description), ipvaFee: settings.ipvaFee }, async (brand, model, year, ipvaFee) => {
+      const picked = { brand, model, modelYear: year };
+      overrides.set(container, picked);
+      await setIpvaFee(ipvaFee);
+      await renderEvaluation(container, ctx, picked);
+    });
+  });
+}
+
+function buildControls(container: HTMLElement) {
+  const controls = container.querySelector<HTMLElement>('.fipe-controls');
+  if (!controls || controls.childElementCount > 0) return;
+
+  // Remember whether the cost breakdown is open: results are rebuilt on every refresh. 'toggle' doesn't bubble.
+  container.addEventListener('toggle', (event) => {
+    if (event.target instanceof HTMLDetailsElement) container.dataset.detailsOpen = String(event.target.open);
+  }, true);
+
+  const toggleLabel = document.createElement('label');
+  toggleLabel.className = 'fipe-toggle';
+  const toggle = document.createElement('input');
+  toggle.type = 'checkbox';
+  toggle.className = 'fipe-auto-toggle';
+  toggleLabel.appendChild(toggle);
+  toggleLabel.appendChild(document.createTextNode('Consulta automática'));
+
+  const manualButton = document.createElement('button');
+  manualButton.type = 'button';
+  manualButton.className = 'fipe-manual-btn';
+  manualButton.textContent = 'Selecionar veículo';
+
+  toggle.addEventListener('change', () => {
+    void setStored({ [AUTO_LOOKUP_KEY]: toggle.checked });
+  });
+  manualButton.addEventListener('click', () => openManual(container));
+
+  controls.appendChild(toggleLabel);
+  controls.appendChild(manualButton);
+}
+
+async function renderWithMode(container: HTMLElement, ctx: LotContext) {
+  const auto = await getAutoLookupEnabled();
+  const sig = `${ctx.description}|${ctx.bidText}|${auto}`;
+  contexts.set(container, ctx);
+
+  if (container.dataset.sig === sig) return; // nothing changed since last render
+  container.dataset.sig = sig;
+  if (container.dataset.desc !== ctx.description) {
+    overrides.delete(container);
+    container.dataset.desc = ctx.description;
+  }
+
+  buildControls(container);
+  const toggle = container.querySelector<HTMLInputElement>('.fipe-auto-toggle');
+  if (toggle) toggle.checked = auto;
+
+  if (auto || overrides.has(container)) {
+    await renderEvaluation(container, ctx);
     return;
   }
 
-  const fipeValue = parseCurrency(fipeData.valor);
-  const results = await calculateProfit(fipeValue, bidValue);
-  updateResults(container, results);
-  container.dataset.state = 'done';
+  container.dataset.run = String(Number(container.dataset.run ?? '0') + 1);
+  container.dataset.state = 'manual';
+  container.style.borderLeftColor = '';
+  const parsed = parseDescription(ctx.description);
+  const resultsEl = getResultsContainer(container);
+  resultsEl.innerHTML = `
+    <div class="fipe-manual-state">
+      <div>
+        <span class="fipe-label">Modo manual</span><br>
+        <span class="fipe-value">${parsed ? escapeHtml(`${parsed.brand} / ${parsed.model} (${parsed.modelYear})`) : 'Nenhum veículo detectado'}</span>
+      </div>
+      <button type="button" class="fipe-manual-open">Abrir seleção</button>
+    </div>
+  `;
+  resultsEl.querySelector<HTMLButtonElement>('.fipe-manual-open')?.addEventListener('click', () => openManual(container));
 }
 
 function findLotCards(): HTMLElement[] {
@@ -526,16 +479,18 @@ function findLotCards(): HTMLElement[] {
   document
     .querySelectorAll('.cardlote, .cardLote, [class*="cardLote"], [class*="card-lote"], a[href*="LoteDetalhes"]')
     .forEach(element => {
+      if (element.closest('.fipe-helper-container')) return;
       const host = element instanceof HTMLAnchorElement
         ? element.closest('.card, article, li, [class*="card"], [class*="col-"]')
         : element;
 
       if (!(host instanceof HTMLElement)) return;
-      if (!findDescriptionElement(host)) return;
+      if (!findDescriptionElement(host) || countDescriptions(host) > 1) return; // wrappers holding many lots are not cards
       cards.add(host);
     });
 
-  return [...cards];
+  // Class names such as "cardLote-descVeic" also match, so keep only the outermost card.
+  return [...cards].filter(card => ![...cards].some(other => other !== card && other.contains(card)));
 }
 
 async function processLot(card: HTMLElement) {
@@ -550,7 +505,7 @@ async function processLot(card: HTMLElement) {
     card;
 
   const container = ensureContainer(card, insertionTarget as HTMLElement);
-  await renderWithMode(container, description, bidText);
+  await renderWithMode(container, { root: card, description, bidText });
 }
 
 function isDetailPage(): boolean {
@@ -581,7 +536,7 @@ async function processDetailPage() {
     insertionTarget.prepend(container);
   }
 
-  await renderWithMode(container, description, bidText);
+  await renderWithMode(container, { root: document, description, bidText });
 }
 
 let scanTimer: number | null = null;
@@ -592,6 +547,7 @@ function scanPage() {
   }
 
   scanTimer = window.setTimeout(() => {
+    scanTimer = null;
     if (isDetailPage()) {
       void processDetailPage();
       return;
@@ -603,23 +559,26 @@ function scanPage() {
   }, 150);
 }
 
+/** True when a mutation was caused by the extension's own UI (which would otherwise re-trigger scans forever). */
+function isOwnMutation(m: MutationRecord): boolean {
+  const target = m.target instanceof Element ? m.target : m.target.parentElement;
+  if (target?.closest('.fipe-helper-container, .fipe-modal-overlay')) return true;
+  const added = [...m.addedNodes, ...m.removedNodes];
+  return added.length > 0 && added.every(n =>
+    n instanceof Element && (n.matches('.fipe-helper-container, .fipe-modal-overlay') || n.closest('.fipe-helper-container, .fipe-modal-overlay')));
+}
+
+function rescanAll() {
+  document.querySelectorAll<HTMLElement>('.fipe-helper-container').forEach(c => { delete c.dataset.sig; });
+  scanPage();
+}
+
 if (window.self === window.top) {
   const start = () => {
-    if (!document.body) {
-      document.addEventListener('DOMContentLoaded', start, { once: true });
-      return;
-    }
-
     scanPage();
 
     const observer = new MutationObserver((mutations) => {
-      const hasMeaningfulChange = mutations.some(m =>
-        m.addedNodes.length > 0 ||
-        (m.type === 'characterData') ||
-        (m.type === 'childList' && (m.target as HTMLElement).classList?.contains('cardLote-vlr'))
-      );
-
-      if (hasMeaningfulChange) {
+      if (mutations.some(m => !isOwnMutation(m))) {
         scanPage();
       }
     });
@@ -628,6 +587,11 @@ if (window.self === window.top) {
       childList: true,
       subtree: true,
       characterData: true
+    });
+
+    // Re-render when settings (or the auto-lookup toggle) change in the popup or another tab.
+    chrome.storage.onChanged.addListener((_changes, area) => {
+      if (area === 'sync') rescanAll();
     });
   };
 

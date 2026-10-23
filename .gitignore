@@ -4,3 +4,5 @@ dist
 .firefox-profile
 web-ext-artifacts
 *.log
+test-results
+playwright-report

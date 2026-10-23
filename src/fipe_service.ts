@@ -1,105 +1,184 @@
-import { FipeVehicle } from './types';
+import { FipeErrorKind, FipeVehicle } from './types';
 
-// FIPE vehicle type category used in API paths
-type FipeCategory = 'carros' | 'motos' | 'caminhoes';
+// Vehicle category as named by each API.
+interface Category {
+  brasil: 'carros' | 'motos' | 'caminhoes';
+  parallelum: 'cars' | 'motorcycles' | 'trucks';
+}
+
+interface NamedCode { name: string; code: string }
+
+export class FipeError extends Error {
+  constructor(public kind: FipeErrorKind, message: string) {
+    super(message);
+    this.name = 'FipeError';
+  }
+}
+
+// Auction abbreviations → FIPE brand names.
+const BRAND_ALIASES: Record<string, string> = {
+  vw: 'volkswagen',
+  gm: 'chevrolet',
+  chev: 'chevrolet',
+  'm benz': 'mercedes benz',
+  mbenz: 'mercedes benz',
+  mmc: 'mitsubishi',
+  lr: 'land rover',
+  'l rover': 'land rover',
+  'i m trading': 'im trading',
+};
+
+const REQUEST_TIMEOUT_MS = 15000;
+// FIPE lists many variants per model; only the best-ranked few are probed for the year (one request each).
+const MAX_CANDIDATES = 15;
 
 export class FipeService {
-  private static BASE_URL = 'https://brasilapi.com.br/api/fipe';
+  // Brands and models come from BrasilAPI (no rate limit); years and prices from the FIPE API v2 (ids are shared).
+  static BRASIL_URL = 'https://brasilapi.com.br/api/fipe';
+  static FIPE_URL = 'https://fipe.parallelum.com.br/api/v2';
 
-  // Categories to try in order (cars first — most common at auctions)
-  private static CATEGORIES: FipeCategory[] = ['carros', 'motos', 'caminhoes'];
+  // Cars first — most common at auctions.
+  private static CATEGORIES: Category[] = [
+    { brasil: 'carros', parallelum: 'cars' },
+    { brasil: 'motos', parallelum: 'motorcycles' },
+    { brasil: 'caminhoes', parallelum: 'trucks' },
+  ];
 
-  private static normalize(text: string): string {
+  private static cache = new Map<string, Promise<unknown>>();
+
+  static clearCache() {
+    this.cache.clear();
+  }
+
+  static normalize(text: string): string {
     return text.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents
-      .replace(/[^a-z0-9 ]/g, ' ')                      // alphanumeric only
+      .normalize('NFD').replace(/[̀-ͯ]/g, '') // remove accents
+      .replace(/(\d)[.,](\d)/g, '$1_$2')                 // keep engine sizes ("1.0") as one token
+      .replace(/[^a-z0-9_ ]/g, ' ')
+      .replace(/_/g, '.')
       .replace(/\s+/g, ' ')
       .trim();
   }
 
-  /** Find brand code within a category's brand list. */
-  private static async findBrand(category: FipeCategory, normBrand: string): Promise<string | null> {
-    try {
-      const res = await fetch(`${this.BASE_URL}/marcas/v1/${category}`);
-      if (!res.ok) return null;
-      const brands: { nome: string; valor: string }[] = await res.json();
-
-      if (!Array.isArray(brands)) return null;
-
-      const found = brands.find(b => {
-        if (!b?.nome) return false;
-        const bName = this.normalize(b.nome);
-        return normBrand === bName || normBrand.includes(bName) || bName.includes(normBrand);
-      });
-      return found?.valor ?? null;
-    } catch (e) {
-      return null;
-    }
+  private static tokens(text: string): string[] {
+    return this.normalize(text).split(' ').filter(w => w.length > 1 || /^\d$/.test(w));
   }
 
-  /** Within a brand's vehicle list, find the best model match by word overlap. */
-  private static findBestModel(
-    models: { nome: string; valor: string }[],
-    normModel: string
-  ): { nome: string; valor: string } | null {
-    if (!Array.isArray(models)) return null;
-    const modelWords = normModel.split(' ').filter(w => w.length > 1);
-    let bestMatch: { nome: string; valor: string } | null = null;
-    let maxOverlap = 0;
+  private static getJson<T>(url: string, token?: string): Promise<T> {
+    const key = url;
+    const cached = this.cache.get(key);
+    if (cached) return cached as Promise<T>;
 
-    for (const m of models) {
-      if (!m?.nome) continue;
-      const mName = this.normalize(m.nome);
-      const mWords = mName.split(' ');
-      const overlap = modelWords.filter(w => mWords.includes(w)).length;
-      if (overlap > maxOverlap) {
-        maxOverlap = overlap;
-        bestMatch = m;
+    const request = (async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: token ? { 'X-Subscription-Token': token } : undefined,
+        });
+        if (res.status === 429) throw new FipeError('rate-limit', 'Limite de consultas da API FIPE excedido');
+        if (!res.ok) throw new FipeError('network', `API FIPE respondeu ${res.status}`);
+        return await res.json() as T;
+      } catch (e) {
+        if (e instanceof FipeError) throw e;
+        throw new FipeError('network', 'Falha ao acessar a API FIPE');
+      } finally {
+        clearTimeout(timer);
       }
-    }
+    })();
 
-    // Require at least 1 meaningful word to match
-    return maxOverlap >= 1 ? bestMatch : null;
+    this.cache.set(key, request);
+    request.catch(() => this.cache.delete(key)); // never cache failures
+    return request;
   }
 
-  static async getPrice(brand: string, model: string, year: number): Promise<FipeVehicle | null> {
-    const normBrand = this.normalize(brand);
-    const normModel = this.normalize(model);
+  /** Finds the FIPE brand code matching an auction brand abbreviation. */
+  static async findBrand(category: Category, brand: string): Promise<string | null> {
+    const norm = this.normalize(brand);
+    const canonical = BRAND_ALIASES[norm] ?? norm;
+    if (!canonical) return null;
+    const canonTokens = canonical.split(' ');
 
-    console.debug(`[FIPE] Searching: brand="${normBrand}" model="${normModel}" year=${year}`);
+    const brands = await this.getJson<{ nome: string; valor: string }[]>(`${this.BRASIL_URL}/marcas/v1/${category.brasil}`);
+    if (!Array.isArray(brands)) return null;
+
+    const found = brands.find(b => {
+      if (!b?.nome) return false;
+      const bName = this.normalize(b.nome);
+      if (bName === canonical) return true;
+      const bTokens = bName.split(' ');
+      return canonTokens.every(t => bTokens.includes(t));
+    });
+    return found?.valor ?? null;
+  }
+
+  /** Ranks FIPE models by token overlap with the auction model; best first. */
+  static rankModels(models: { modelo: string; valor: string }[], model: string, limit = MAX_CANDIDATES): { modelo: string; valor: string }[] {
+    if (!Array.isArray(models)) return [];
+    const wanted = this.tokens(model);
+    if (wanted.length === 0) return [];
+    const required = Math.min(2, wanted.length);
+
+    return models
+      .filter(m => m?.modelo && m?.valor)
+      .map(m => {
+        const mTokens = this.normalize(m.modelo).split(' ');
+        const overlap = wanted.filter(w => mTokens.includes(w)).length;
+        return { m, overlap, extra: mTokens.length };
+      })
+      .filter(x => x.overlap >= required)
+      .sort((a, b) => b.overlap - a.overlap || a.extra - b.extra)
+      .slice(0, limit)
+      .map(x => x.m);
+  }
+
+  private static yearOf(code: string): number {
+    return parseInt(code.split('-')[0], 10);
+  }
+
+  /**
+   * Looks up the FIPE price. Returns null when nothing matches.
+   * Throws FipeError when the API is unreachable or rate-limited and nothing was found.
+   */
+  static async getPrice(brand: string, model: string, year: number, token?: string): Promise<FipeVehicle | null> {
+    let lastError: FipeError | null = null;
 
     for (const category of this.CATEGORIES) {
       try {
-        const brandCode = await this.findBrand(category, normBrand);
+        const brandCode = await this.findBrand(category, brand);
         if (!brandCode) continue;
 
-        const modelsRes = await fetch(`${this.BASE_URL}/veiculos/v1/${category}/${brandCode}`);
-        if (!modelsRes.ok) continue;
-        const models: { nome: string; valor: string }[] = await modelsRes.json();
+        const models = await this.getJson<{ modelo: string; valor: string }[]>(
+          `${this.BRASIL_URL}/veiculos/v1/${category.brasil}/${brandCode}`
+        );
+        const candidates = this.rankModels(models, model, MAX_CANDIDATES);
+        if (candidates.length === 0) continue;
 
-        const bestModel = this.findBestModel(models, normModel);
-        if (!bestModel) continue;
+        // Walk the ranked variants until one has the exact model year; remember the closest adjacent year meanwhile.
+        let adjacent: { base: string; code: string; delta: number } | null = null;
+        for (const candidate of candidates) {
+          const base = `${this.FIPE_URL}/${category.parallelum}/brands/${brandCode}/models/${candidate.valor}`;
+          const years = await this.getJson<NamedCode[]>(`${base}/years`, token);
+          if (!Array.isArray(years)) continue;
 
-        console.debug(`[FIPE] Matched model: "${bestModel.nome}" (code ${bestModel.valor})`);
+          const exact = years.find(y => this.yearOf(y.code) === year);
+          if (exact) return await this.getJson<FipeVehicle>(`${base}/years/${exact.code}`, token);
 
-        const pricesRes = await fetch(`${this.BASE_URL}/preco/v1/${bestModel.valor}`);
-        if (!pricesRes.ok) continue;
-        const prices: FipeVehicle[] = await pricesRes.json();
-
-        // Try exact year match first, then adjacent years (model year may differ by 1)
-        const exactMatch = prices.find(p => p.anoModelo === year);
-        if (exactMatch) return exactMatch;
-
-        const nearMatch = prices.find(p => p.anoModelo === year - 1 || p.anoModelo === year + 1);
-        if (nearMatch) {
-          console.debug(`[FIPE] Using adjacent year ${nearMatch.anoModelo} for requested ${year}`);
-          return nearMatch;
+          for (const delta of [-1, 1]) {
+            const near = years.find(y => this.yearOf(y.code) === year + delta);
+            if (near && !adjacent) adjacent = { base, code: near.code, delta };
+          }
         }
-      } catch (error) {
-        console.error(`[FIPE] Error in category ${category}:`, error);
+
+        if (adjacent) return await this.getJson<FipeVehicle>(`${adjacent.base}/years/${adjacent.code}`, token);
+      } catch (e) {
+        if (e instanceof FipeError) lastError = e;
+        else throw e;
       }
     }
 
+    if (lastError) throw lastError;
     return null;
   }
 }

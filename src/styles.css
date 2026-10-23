@@ -1,174 +1,533 @@
+/* Leilão FIPE Helper — injected UI. Everything is scoped under .fipe-* to avoid clashing with the host page. */
+
+.fipe-helper-container,
+.fipe-modal-overlay {
+  --fipe-ink: #0f172a;
+  --fipe-muted: #64748b;
+  --fipe-line: #e2e8f0;
+  --fipe-surface: #ffffff;
+  --fipe-subtle: #f8fafc;
+  --fipe-accent: #4f46e5;
+  --fipe-accent-strong: #4338ca;
+  --fipe-good: #059669;
+  --fipe-good-bg: #ecfdf5;
+  --fipe-bad: #dc2626;
+  --fipe-bad-bg: #fef2f2;
+  --fipe-warn: #b45309;
+  --fipe-warn-bg: #fffbeb;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--fipe-ink);
+  line-height: 1.4;
+}
+
+.fipe-helper-container *,
+.fipe-modal-overlay * {
+  box-sizing: border-box;
+}
+
+/* ---------- Card ---------- */
 .fipe-helper-container {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  padding: 12px;
+  background: var(--fipe-surface);
+  border: 1px solid var(--fipe-line);
+  border-left: 4px solid var(--fipe-accent);
+  border-radius: 16px;
+  padding: 14px;
   margin-top: 10px;
-  border-left: 4px solid #00c853;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-  font-family: 'Inter', sans-serif;
-  backdrop-filter: blur(5px);
-  transition: transform 0.3s ease, border-left-color 0.3s ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.18);
+  font-size: 13px;
+  transition: box-shadow 0.2s ease, border-left-color 0.3s ease;
 }
 
 .fipe-helper-container:hover {
-  transform: translateY(-2px);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 12px 28px -12px rgba(15, 23, 42, 0.28);
 }
 
-.fipe-row {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
-  font-size: 14px;
-}
-
-.fipe-label {
-  color: #666;
-  font-weight: 500;
-}
-
-.fipe-value {
-  font-weight: 700;
-  color: #222;
-}
-
-.fipe-profit {
-  color: #00c853;
-  font-size: 16px;
-  border-top: 1px solid #eee;
-  padding-top: 8px;
-  margin-top: 8px;
-}
-
-.fipe-profit.negative {
-  color: #ff5252;
-}
-
-.fipe-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 800;
-  background: #e8f5e9;
-  color: #2e7d32;
-  margin-left: 8px;
-}
-
-.fipe-badge.negative {
-  background: #ffebee;
-  color: #c62828;
-}
-
-.fipe-loading {
-  opacity: 0.6;
-  font-style: italic;
-}
-
-.fipe-not-found {
-  color: #ff5252;
-  font-size: 12px;
-}
-
+/* ---------- Header: switch + action ---------- */
 .fipe-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .fipe-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fipe-muted);
+  white-space: nowrap;
   cursor: pointer;
+  user-select: none;
 }
 
 .fipe-toggle input {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 32px;
+  height: 18px;
   margin: 0;
+  border-radius: 999px;
+  background: #cbd5e1;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  flex: none;
 }
 
-.fipe-manual-btn {
-  border: 1px solid #ccc;
+.fipe-toggle input::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
   background: #fff;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 13px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.3);
+  transition: transform 0.2s ease;
+}
+
+.fipe-toggle input:checked {
+  background: var(--fipe-accent);
+}
+
+.fipe-toggle input:checked::after {
+  transform: translateX(14px);
+}
+
+.fipe-toggle input:focus-visible,
+.fipe-manual-btn:focus-visible,
+.fipe-manual-open:focus-visible,
+.fipe-retry:focus-visible,
+.fipe-details summary:focus-visible {
+  outline: 2px solid var(--fipe-accent);
+  outline-offset: 2px;
+}
+
+.fipe-manual-btn,
+.fipe-manual-open,
+.fipe-retry {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fipe-accent);
+  background: transparent;
+  border: 1px solid var(--fipe-line);
+  border-radius: 999px;
+  padding: 5px 10px;
   cursor: pointer;
+  white-space: nowrap;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.fipe-manual-btn:hover {
-  border-color: #999;
-  background: #f7f7f7;
+.fipe-manual-btn:hover,
+.fipe-manual-open:hover,
+.fipe-retry:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
 }
 
+/* ---------- Result: hero + stats ---------- */
+.fipe-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--fipe-good-bg);
+}
+
+.fipe-hero.negative {
+  background: var(--fipe-bad-bg);
+}
+
+.fipe-hero > .fipe-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fipe-good);
+}
+
+.fipe-hero.negative > .fipe-label {
+  color: var(--fipe-bad);
+}
+
+.fipe-profit {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--fipe-good);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.fipe-profit.negative {
+  color: var(--fipe-bad);
+}
+
+.fipe-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  background: #fff;
+  color: var(--fipe-good);
+  box-shadow: inset 0 0 0 1px rgba(5, 150, 105, 0.25);
+}
+
+.fipe-badge.negative {
+  color: var(--fipe-bad);
+  box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.25);
+}
+
+.fipe-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.fipe-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--fipe-subtle);
+  border: 1px solid var(--fipe-line);
+}
+
+.fipe-stat .fipe-label {
+  font-size: 11px;
+}
+
+.fipe-stat .fipe-value {
+  font-size: 14px;
+}
+
+.fipe-fipe-model {
+  margin: 8px 2px 0;
+  font-size: 11px;
+  color: var(--fipe-muted);
+  display: block;
+}
+
+/* ---------- Cost breakdown ---------- */
+.fipe-details {
+  margin-top: 10px;
+  border-top: 1px solid var(--fipe-line);
+  padding-top: 8px;
+}
+
+.fipe-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  list-style: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fipe-muted);
+  padding: 2px 0;
+  border-radius: 6px;
+}
+
+.fipe-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.fipe-details summary::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+  margin-right: 3px;
+}
+
+.fipe-details[open] summary::after {
+  transform: rotate(-135deg);
+}
+
+.fipe-details summary:hover {
+  color: var(--fipe-ink);
+}
+
+.fipe-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 12px;
+}
+
+.fipe-details .fipe-row + .fipe-row {
+  border-top: 1px dashed var(--fipe-line);
+}
+
+.fipe-label {
+  color: var(--fipe-muted);
+  font-weight: 500;
+}
+
+.fipe-value {
+  color: var(--fipe-ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- States ---------- */
+.fipe-loading {
+  display: block;
+  padding: 0;
+}
+
+.fipe-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fipe-skeleton i {
+  display: block;
+  height: 56px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%);
+  background-size: 400% 100%;
+  animation: fipe-shimmer 1.4s ease infinite;
+}
+
+.fipe-skeleton i:last-child {
+  height: 40px;
+}
+
+.fipe-skeleton .fipe-label {
+  font-size: 12px;
+}
+
+@keyframes fipe-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.fipe-alert {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--fipe-warn-bg);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fipe-warn);
+}
+
+.fipe-alert::before {
+  content: '!';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--fipe-warn);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.fipe-alert .fipe-not-found {
+  flex: 1 1 140px;
+}
+
+.fipe-not-found {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fipe-alert .fipe-retry {
+  color: inherit;
+  border-color: currentColor;
+  margin-left: auto;
+}
+
+.fipe-alert .fipe-retry:hover {
+  background: rgba(180, 83, 9, 0.1);
+}
+
+.fipe-manual-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--fipe-subtle);
+  border: 1px dashed #cbd5e1;
+}
+
+.fipe-manual-state .fipe-value {
+  white-space: normal;
+  text-align: right;
+}
+
+/* ---------- Modal ---------- */
 .fipe-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 999999;
+  animation: fipe-fade 0.15s ease;
 }
 
 .fipe-modal {
-  width: min(380px, calc(100vw - 32px));
-  background: #fff;
-  border-radius: 14px;
-  padding: 18px 18px 14px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  font-family: 'Inter', sans-serif;
+  width: min(400px, calc(100vw - 32px));
+  background: var(--fipe-surface);
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: 0 24px 60px -12px rgba(15, 23, 42, 0.45);
+  animation: fipe-pop 0.18s ease;
 }
 
 .fipe-modal h3 {
-  margin: 0 0 10px;
-  font-size: 16px;
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--fipe-ink);
+}
+
+.fipe-modal h3::after {
+  content: 'Corrija marca, modelo ou ano para refazer a consulta.';
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--fipe-muted);
 }
 
 .fipe-modal-row {
-  margin-bottom: 10px;
+  margin-top: 12px;
 }
 
 .fipe-modal-row label {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+/* "*" marker sits right after the label text */
+.fipe-modal-row label > span {
+  order: 0;
+  color: var(--fipe-bad);
 }
 
 .fipe-modal-row input {
-  width: 130px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid #ddd;
-  font-size: 13px;
+  order: 1;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: var(--fipe-ink);
+  font: inherit;
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.fipe-modal-row input:focus {
+  outline: none;
+  border-color: var(--fipe-accent);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
 }
 
 .fipe-modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 20px;
 }
 
 .fipe-modal-actions button {
-  border: none;
-  padding: 8px 12px;
-  border-radius: 8px;
-  cursor: pointer;
+  font: inherit;
   font-size: 13px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.fipe-modal-actions button:active {
+  transform: scale(0.98);
 }
 
 .fipe-modal-cancel {
-  background: #f4f4f4;
-  color: #333;
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.fipe-modal-cancel:hover {
+  background: #e2e8f0;
 }
 
 .fipe-modal-submit {
-  background: #00c853;
+  background: var(--fipe-accent);
   color: #fff;
+}
+
+.fipe-modal-submit:hover {
+  background: var(--fipe-accent-strong);
+}
+
+.fipe-modal-actions button:focus-visible {
+  outline: 2px solid var(--fipe-accent);
+  outline-offset: 2px;
+}
+
+@keyframes fipe-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fipe-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fipe-helper-container *,
+  .fipe-modal-overlay,
+  .fipe-modal {
+    animation: none !important;
+    transition: none !important;
+  }
 }

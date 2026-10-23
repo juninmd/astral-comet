@@ -1,20 +1,20 @@
 export interface FipeVehicle {
-  valor: string;
-  marca: string;
-  modelo: string;
-  anoModelo: number;
-  combustivel: string;
-  codigoFipe: string;
-  mesReferencia: string;
-  tipoVeiculo: number;
-  siglaCombustivel: string;
-  dataConsulta: string;
+  price: string;
+  brand: string;
+  model: string;
+  modelYear: number;
+  fuel: string;
+  codeFipe: string;
+  referenceMonth: string;
 }
+
+export type FipeErrorKind = 'rate-limit' | 'network' | 'not-found';
 
 export interface CalculationResult {
   fipeValue: number;
   bidValue: number;
   commission: number;
+  commissionRate: number;
   adminFee: number;
   logisticsFee: number;
   extraCosts: number;

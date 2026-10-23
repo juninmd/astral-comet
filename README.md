@@ -30,6 +30,8 @@ Extensão para Chrome/Brave/Edge e Firefox (Manifest V3) que consulta a **Tabela
 
 ## 🚀 Instalação
 
+Requisitos: Node.js 22 (versão usada no CI) e pnpm 10 (`packageManager` do `package.json`).
+
 ```bash
 pnpm install
 pnpm build        # gera dist/
@@ -69,6 +71,15 @@ ATPV-e é fixo em R$ 40,00. O IPVA é informado em **Selecionar veículo** e só
 | `pnpm dev` | Firefox com web-ext |
 
 Estrutura: `src/content_script.ts` (UI nas páginas), `src/vehicle_picker.ts` + `src/combobox.ts` + `src/search.ts` (seletor de veículo), `src/fipe_service.ts` (consulta/match/catálogo), `src/lib.ts` (parse e cálculo), `src/settings.ts` (storage), `src/popup.*`, `e2e/` (fixtures e testes).
+
+## 🔒 Gates de CI
+
+| Workflow | O que checa |
+|---|---|
+| `CI` (`ci.yml`) | Node 22, `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm lint:ext` e o e2e do Playwright com a extensão no Chromium |
+| `Validate` (`validate.yml`) | Reutiliza `juninmd/base-actions` (`reusable-validate.yml`): validação do PR (lint apenas como aviso) e auditoria de dependências, nível `high` bloqueante |
+| `Security Scan` (`security.yml`) | Gitleaks via `juninmd/base-actions` (`reusable-security-scan.yml`), em push para `main`/`master` |
+| `Release Drafter` (`release-drafter.yml`) | Mantém o rascunho de release atualizado; não bloqueia |
 
 ## ✅ Homologação
 

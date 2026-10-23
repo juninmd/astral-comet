@@ -11,12 +11,15 @@ Extensão Chrome/Firefox (MV3) que mostra FIPE e lucro estimado nos lotes do Fre
 ## Structure
 ```
 src/content_script.ts   # injeta o card nas páginas; MutationObserver, modo manual, erros
+src/vehicle_picker.ts   # modal "Selecionar veículo" (categoria → marca → modelo → ano)
+src/combobox.ts         # combobox acessível (teclado) usado pelo seletor
+src/search.ts           # busca/filtro de modelos por vários termos, sem acento
 src/fipe_service.ts     # consulta FIPE: marca → modelo (ranking) → ano → preço; cache + FipeError
 src/lib.ts              # funções puras: parseCurrency, parseDescription, calculate
 src/settings.ts         # defaults e acesso ao chrome.storage.sync
 src/popup.{html,ts}     # configurações de custos e token FIPE
 src/styles.css          # CSS injetado
-tests/                  # vitest (lib, fipe_service, live opcional)
+tests/                  # vitest (lib, fipe_service, search, live opcional)
 e2e/                    # Playwright: fixtures (páginas do leilão + mock das APIs) e specs
 docs/screenshots/       # prints gerados pelo e2e (usados no README)
 manifest.json           # MV3, Chrome + Firefox (gecko id)
@@ -27,6 +30,12 @@ manifest.json           # MV3, Chrome + Firefox (gecko id)
 - `pnpm typecheck` · `pnpm test` · `pnpm test:e2e` · `pnpm lint:ext`
 - `LIVE=1 pnpm test` / `LIVE=1 pnpm test:e2e` → incluem chamadas às APIs reais
 - `pnpm dev` → Firefox via web-ext
+
+## CI gates
+- `ci.yml`: Node 22, `pnpm install --frozen-lockfile` → `typecheck` → `test` → `build` → `lint:ext` → e2e Playwright. Rode o mesmo antes de abrir PR.
+- `validate.yml`: reusable de `juninmd/base-actions` (lint só avisa; auditoria de dependências `high` bloqueia).
+- `security.yml`: Gitleaks (reusable de `base-actions`). Nunca commitar token FIPE ou `.env`.
+- `release-drafter.yml`: rascunho de release, não bloqueia.
 
 ## Conventions
 - TypeScript strict; manifest compatível Chrome/Firefox; UI injetada via CSS próprio (`.fipe-*`).

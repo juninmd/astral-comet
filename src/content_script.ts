@@ -264,7 +264,7 @@ function maxBidBlock(r: CalculationResult): string {
   return `<div class="fipe-maxbid${gap < 0 ? ' negative' : ''}">${title}<span class="fipe-value">${brl.format(r.maxBid)}</span><span class="fipe-maxbid-note">${note}</span></div>`;
 }
 
-function updateResults(container: HTMLElement, results: CalculationResult, fipe: { value: number; model: string; reference: string } | null, risks: Risk[] = []) {
+function updateResults(container: HTMLElement, results: CalculationResult, fipe: { value: number; model: string; reference: string; approximate?: boolean } | null, risks: Risk[] = []) {
   const resultsEl = getResultsContainer(container);
   const pct = percent(results.commissionRate);
   const wasOpen = container.dataset.detailsOpen === 'true';
@@ -310,7 +310,7 @@ function updateResults(container: HTMLElement, results: CalculationResult, fipe:
       ${stat('Custo Total', brl.format(results.totalCost))}
     </div>
     ${maxBidBlock(results)}
-    <span class="fipe-fipe-model">${escapeHtml(fipe.model)} · ${escapeHtml(fipe.reference)}</span>
+    <span class="fipe-fipe-model">${escapeHtml(fipe.model)} · ${escapeHtml(fipe.reference)}${fipe.approximate ? ' · <span class="fipe-approx" title="A versão exata não foi identificada. Confira em Selecionar veículo.">aproximado</span>' : ''}</span>
     ${breakdown}
   `;
 }
@@ -357,7 +357,7 @@ async function renderEvaluation(container: HTMLElement, ctx: LotContext, overrid
 
     const fipeValue = parseCurrency(fipeData.price);
     const results = calculate(fipeValue, bidValue, settings, extractFeesFromPage(ctx.root));
-    updateResults(container, results, { value: fipeValue, model: fipeData.model, reference: fipeData.referenceMonth }, risks);
+    updateResults(container, results, { value: fipeValue, model: fipeData.model, reference: fipeData.referenceMonth, approximate: 'approximate' in fipeData ? fipeData.approximate === true : false }, risks);
     notes.get(container)?.setMaxBid(results.maxBid);
     container.dataset.state = 'done';
   } catch (e) {

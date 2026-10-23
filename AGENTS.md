@@ -15,6 +15,8 @@ src/vehicle_picker.ts   # modal "Selecionar veículo" (categoria → marca → m
 src/combobox.ts         # combobox acessível (teclado) usado pelo seletor
 src/search.ts           # busca/filtro de modelos por vários termos, sem acento
 src/fipe_service.ts     # consulta FIPE: marca → modelo (ranking) → ano → preço; cache + FipeError
+src/model_match.ts       # ranking de modelos: leituras de token, sinônimos, família, flag approximate
+src/depara.ts            # tabelas de de-para (marcas, siglas, reescritas por marca, não-FIPE); toda entrada vem de lote real
 src/fipe_http.ts        # fetch com timeout, cache persistente (storage.local), cópia reserva em erro, pausa após 429
 src/persistent_cache.ts # cache por tabela de referência FIPE, cooldown e contador de cota
 src/lib.ts              # funções puras: parseCurrency, parseDescription, calculate (revenda, meta, lance máximo)
@@ -43,6 +45,7 @@ manifest.json           # MV3, Chrome + Firefox (gecko id)
 
 ## Conventions
 - TypeScript strict; manifest compatível Chrome/Firefox; UI injetada via CSS próprio (`.fipe-*`).
+- Nome novo do leilão que não casa: adicione a entrada em `depara.ts` + caso em `tests/model_match.test.ts` (nome real do lote, nome FIPE real). Não afrouxe o matcher.
 - Lógica pura vai em `lib.ts` com teste unitário; comportamento de DOM vai coberto no e2e.
 - `commissionRate` é guardado em **%** no storage (popup) e convertido para fração em `settings.ts`; a comissão lida da página já é fração.
 - A resposta real da BrasilAPI usa `{ modelo, valor }` nos modelos e `{ nome, valor }` nas marcas; a FIPE v2 usa `{ code, name }` e `price`. Não presumir outros nomes.

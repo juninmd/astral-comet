@@ -149,6 +149,51 @@ describe('FipeService.getPrice', () => {
     expect((await FipeService.getPrice('FIAT', 'UNO MILLE', 2011))?.modelYear).toBe(2010);
   });
 
+  describe('approximate flag (the auction name did not pin the variant down)', () => {
+    it('is false when the variant words matched', async () => {
+      mockApi();
+      expect((await FipeService.getPrice('FIAT', 'UNO MILLE ECONOMY', 2009))?.approximate).toBe(false);
+    });
+    it('is true when only the family word matched', async () => {
+      mockApi();
+      expect((await FipeService.getPrice('FIAT', 'PALIO', 2009))?.approximate).toBe(true);
+    });
+    it('is true when an adjacent year stood in', async () => {
+      mockApi();
+      expect((await FipeService.getPrice('FIAT', 'UNO MILLE ECONOMY', 2011))?.approximate).toBe(true);
+    });
+  });
+
+  it('resolves import prefixes and truncated names end to end', async () => {
+    mockApi();
+    expect((await FipeService.getPrice('VW', 'GOL CIT 10', 2009))?.model).toBe('M200');
+  });
+
+  it('spends at most MAX_GUESSES years requests on family-only guesses', async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ modelo: `Palio Variante ${i}`, valor: String(500 + i) }));
+    const calls = mockApi({
+      'veiculos/v1/carros/21': () => new Response(JSON.stringify(many), { status: 200 }),
+      '/years': () => new Response(JSON.stringify([{ code: '2015-1', name: '2015 Gasolina' }]), { status: 200 }),
+    });
+    expect(await FipeService.getPrice('FIAT', 'PALIO', 2009)).toBeNull();
+    expect(calls.filter(u => /years$/.test(u)).length).toBe(6);
+  });
+
+  it('tries the category whose model scores best first (a CB 300F is a motorcycle even if the car list has a CB)', async () => {
+    mockApi({
+      '/marcas/v1/carros': () => new Response(JSON.stringify([{ nome: 'HONDA', valor: '80' }]), { status: 200 }),
+      'veiculos/v1/carros/80': () => new Response(JSON.stringify([{ modelo: 'CB Carro', valor: '950' }]), { status: 200 }),
+      'veiculos/v1/motos/80': () => new Response(JSON.stringify([{ modelo: 'CB 300F Twister Flex', valor: '901' }]), { status: 200 }),
+    });
+    expect(await FipeService.resolveVehicle('HONDA', 'CB300F TWISTER')).toMatchObject({ category: { brasil: 'motos' }, modelCode: '901' });
+  });
+
+  it('skips trailers without a single request (FIPE does not price them)', async () => {
+    const calls = mockApi();
+    expect(await FipeService.getPrice('SR', 'FACCHINI SRF 4CB', 2020)).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
   it('returns null when the year is far away', async () => {
     mockApi();
     expect(await FipeService.getPrice('FIAT', 'UNO MILLE', 1990)).toBeNull();

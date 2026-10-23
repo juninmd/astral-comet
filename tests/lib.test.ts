@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculate, expandYear, parseCurrency, parseDescription } from '../src/lib';
+import { calculate, expandYear, parseAmount, parseCurrency, parseDescription } from '../src/lib';
 import { Fees } from '../src/lib';
 
 const fees: Fees = { towing: 1500, extraCosts: 0, adminFee: 1900, logisticsFee: 1416, atpvFee: 40, commissionRate: 0.05, ipvaFee: 0 };
@@ -80,6 +80,54 @@ describe('calculate', () => {
     });
     it('is 0 when there is no FIPE value', () => {
       expect(calculate(0, 5000, fees).maxBid).toBe(0);
+    });
+  });
+  describe('parseAmount (a number the buyer typed)', () => {
+    it('reads pt-BR and plain forms', () => {
+      expect(parseAmount('12.000,50')).toBe(12000.5);
+      expect(parseAmount('R$ 12.000,50')).toBe(12000.5);
+      expect(parseAmount('12000')).toBe(12000);
+      expect(parseAmount('12.000')).toBe(12000);
+      expect(parseAmount('1.234.567')).toBe(1234567);
+    });
+    it('treats a lone dot before one or two digits as a decimal point, not a thousands separator', () => {
+      expect(parseAmount('15000.50')).toBe(15000.5);
+      expect(parseAmount('12.5')).toBe(12.5);
+    });
+    it('never returns a negative or non-finite amount', () => {
+      expect(parseAmount('-500')).toBe(0);
+      expect(parseAmount('abc')).toBe(0);
+      expect(parseAmount('')).toBe(0);
+    });
+  });
+  describe('resale discount and target margin', () => {
+    it('defaults keep the plain FIPE break-even (existing behaviour)', () => {
+      const r = calculate(30000, 10000, fees);
+      expect(r.resaleValue).toBe(30000);
+      expect(calculate(30000, 10000, { ...fees, resaleDiscount: 0, targetMargin: 0 })).toEqual(r);
+    });
+    it('values the resale below FIPE: profit is measured against FIPE × (1 − discount)', () => {
+      const r = calculate(30000, 10000, { ...fees, resaleDiscount: 0.2 });
+      expect(r.resaleValue).toBe(24000);
+      expect(r.profit).toBe(24000 - r.totalCost);
+      expect(r.fipeValue).toBe(30000); // FIPE itself is still reported as is
+    });
+    it('maxBid with a margin: total cost may be at most resale / (1 + margin)', () => {
+      const withMargin: Fees = { ...fees, targetMargin: 0.1 };
+      const { maxBid } = calculate(30000, 0, withMargin);
+      const at = calculate(30000, maxBid, withMargin);
+      expect(at.profitPercentage).toBeGreaterThanOrEqual(10 - 1e-9);
+      expect(calculate(30000, maxBid + 0.01, withMargin).profitPercentage).toBeLessThan(10);
+    });
+    it('combines both: lower resale and a margin shrink the maximum bid', () => {
+      const plain = calculate(30000, 0, fees).maxBid;
+      const strict = calculate(30000, 0, { ...fees, resaleDiscount: 0.15, targetMargin: 0.1 }).maxBid;
+      expect(strict).toBeLessThan(plain);
+      // (30000 × 0.85 / 1.1 − 4856) / 1.05
+      expect(strict).toBe(Math.floor(((25500 / 1.1 - 4856) / 1.05) * 100) / 100);
+    });
+    it('is 0 when the discount wipes out the margin over fixed costs', () => {
+      expect(calculate(6000, 0, { ...fees, resaleDiscount: 0.5 }).maxBid).toBe(0);
     });
   });
   it('zero bid and zero fees does not divide by zero', () => {

@@ -94,6 +94,24 @@ test('rate limit (429) shows a message and "Tentar novamente" recovers', async (
   await expect(uno).toContainText('Lucro Estimado');
 });
 
+// 4b ─ persistent cache (chrome.storage.local) across page loads
+const v2Calls = () => api.calls.filter(u => u.includes('fipe.parallelum.com.br'));
+
+test('reloading a lot page reuses stored FIPE answers instead of calling the API again', async () => {
+  const first = await open();
+  await expect(lotCard(first, 0)).toContainText('Lucro Estimado');
+  await expect(lotCard(first, 1)).toContainText('Lucro Estimado');
+  const spent = v2Calls().length;
+  expect(spent).toBeGreaterThan(0);
+  await first.close();
+
+  api.price429 = true; // anything that did reach the API would now fail visibly
+  const second = await open();
+  await expect(lotCard(second, 0)).toContainText('R$ 9.894,00');
+  await expect(lotCard(second, 1)).toContainText('Lucro Estimado');
+  expect(v2Calls().length).toBe(spent);
+});
+
 // 5 ─ offline
 test('API offline shows a connection error', async () => {
   api.offline = true;
@@ -405,6 +423,124 @@ test('popup: defaults, save, persistence, reset, invalid input; settings reach t
   await popup.click('button[type="submit"]');
   await expect(popup.locator('#success')).toBeHidden();
   expect(await popup.locator('#commissionRate').evaluate((e: HTMLInputElement) => e.validity.rangeOverflow)).toBe(true);
+});
+
+// 10b ─ buyer tools
+const saveSettings = async (values: Record<string, string>) => {
+  const popup = await context.newPage();
+  await popup.goto(popupUrl());
+  for (const [id, value] of Object.entries(values)) await popup.fill(`#${id}`, value);
+  await popup.click('button[type="submit"]');
+  await expect(popup.locator('#success')).toBeVisible();
+  await popup.close();
+};
+
+test('resale discount and target margin change profit and the maximum bid', async () => {
+  await saveSettings({ resaleDiscount: '20', targetMargin: '10' });
+  const page = await open(DETAIL_URL);
+  const panel = page.locator('#fipe-detail-helper');
+  // resale 20.000 × 0,8 = 16.000; cost 10.106 → 5.894
+  await expect(panel).toContainText('R$ 5.894,00');
+  // floor(((16.000 / 1,1 − 4.856) / 1,05) × 100) / 100 = 9.228,05
+  await expect(panel.locator('.fipe-maxbid')).toContainText('Lance máximo (lucro de 10%)');
+  await expect(panel.locator('.fipe-maxbid')).toContainText('R$ 9.228,05');
+  await panel.locator('.fipe-details summary').click();
+  await expect(panel).toContainText('Revenda estimada (FIPE −20%)');
+  await shot(page, '14-revenda-e-meta');
+});
+
+test('red-flag words in the lot text show as chips; negated or clean lots show none', async () => {
+  lots = [
+    { desc: 'FIAT/UNO MILLE ECONOMY, 08/09 - SUCATA, sem documentação', bid: 5000 },
+    { desc: 'FIAT/UNO MILLE ECONOMY, 08/09 - veículo sem sinistro', bid: 5000 },
+    UNO,
+    // Auction-wide conditions copied in shape from the live site: the disclaimer is not a finding, the debt cap is a cost.
+    { desc: 'FIAT/UNO MILLE ECONOMY, 08/09 IPVA 2026 PAGO / A CONCRETIZAÇÃO DA ARREMATAÇÃO SOMENTE SERÁ REALIZADA EM NOME DE QUEM PAGOU, E SINISTROS JÁ OCORRIDOS EM QUALQUER CLASSIFICAÇÃO DE MONTA OU TIPO CORRERÃO P/C DO COMPRADOR / DÉBITOS ATE R$ 500,00 P/C DO COMPRADOR', bid: 5000 },
+  ];
+  const page = await open();
+  const risky = lotCard(page, 0);
+  await expect(risky.locator('.fipe-risk')).toHaveText(['Sucata / baixa definitiva', 'Sem documentação / cadastro']);
+  await expect(risky.locator('.fipe-risks')).toHaveAttribute('aria-label', 'Alertas do lote');
+  await expect(lotCard(page, 1)).toContainText('Lucro Estimado');
+  await expect(lotCard(page, 1).locator('.fipe-risk')).toHaveCount(0);
+  await expect(lotCard(page, 2).locator('.fipe-risk')).toHaveCount(0);
+  const wide = lotCard(page, 3);
+  await expect(wide).toContainText('Lucro Estimado');
+  await expect(wide.locator('.fipe-risk')).toHaveText(['Débitos até R$ 500,00 por conta do comprador']);
+  await shot(page, '15-alertas-de-risco');
+});
+
+test('my lot: favorite, checklist, target bid and notes persist, and the popup lists the favorite', async () => {
+  const page = await open(DETAIL_URL);
+  const panel = page.locator('#fipe-detail-helper');
+  await expect(panel).toContainText('Lucro Estimado');
+  const fav = panel.locator('.fipe-fav');
+  await expect(fav).toHaveAttribute('aria-pressed', 'false');
+  await fav.click();
+  await panel.locator('.fipe-notes summary').click();
+  await panel.locator('.fipe-checklist input').nth(0).check();
+  await panel.locator('.fipe-checklist input').nth(2).check();
+  await panel.locator('.fipe-target').fill('12000.50'); // a dot before two digits is a decimal point, not R$ 1.200.050
+  await expect(panel.locator('.fipe-target-note')).toContainText('2.422,35 abaixo do lance máximo');
+  await panel.locator('.fipe-target').fill('16.000,00');
+  await panel.locator('.fipe-note-field').fill('Pneus carecas; <b>conferir</b> chave reserva');
+  await expect(panel.locator('.fipe-notes summary')).toContainText('(2/6)');
+  // max bid 14.422,85 → the target is 1.577,15 above it
+  await expect(panel.locator('.fipe-target-note')).toContainText('1.577,15 acima do lance máximo');
+  await expect(panel.locator('.fipe-risk')).toHaveCount(0); // the checklist mentions "sucata" but is not lot text
+  await shot(page, '16-meu-lote');
+  await page.waitForTimeout(600); // debounced save
+  await page.close();
+
+  const again = await open(DETAIL_URL);
+  const back = again.locator('#fipe-detail-helper');
+  await expect(back.locator('.fipe-fav')).toHaveAttribute('aria-pressed', 'true');
+  await expect(back.locator('.fipe-notes summary')).toContainText('(2/6)');
+  await expect(back.locator('.fipe-target')).toHaveValue('16.000,00');
+  await expect(back.locator('.fipe-note-field')).toHaveValue('Pneus carecas; <b>conferir</b> chave reserva');
+  await expect(back.locator('.fipe-notes b')).toHaveCount(0); // notes are text, never markup
+
+  const popup = await context.newPage();
+  await popup.goto(popupUrl());
+  const item = popup.locator('#favList li');
+  await expect(item).toHaveCount(1);
+  await expect(item).toContainText('FIAT/UNO MILLE ECONOMY');
+  await expect(item).toContainText('Alvo R$');
+  await expect(item.locator('a')).toHaveAttribute('href', DETAIL_URL);
+  await shot(popup, '17-popup-favoritos');
+  await item.locator('button').click();
+  await expect(popup.locator('#favList li')).toHaveCount(0);
+  await expect(popup.locator('#favEmpty')).toBeVisible();
+
+  await again.reload();
+  await expect(again.locator('#fipe-detail-helper .fipe-fav')).toHaveAttribute('aria-pressed', 'false');
+  await expect(again.locator('#fipe-detail-helper .fipe-note-field')).toHaveValue('Pneus carecas; <b>conferir</b> chave reserva'); // notes outlive the favorite
+});
+
+test('popup counts API requests, and reloading cached lots does not spend more', async () => {
+  const page = await open();
+  await expect(lotCard(page, 1)).toContainText('Lucro Estimado');
+  const popup = await context.newPage();
+  const count = async () => {
+    await popup.goto(popupUrl());
+    const text = (await popup.locator('#quotaText').textContent()) ?? '';
+    return { n: Number(text.match(/hoje: (\d+) de 500/)?.[1] ?? NaN), text };
+  };
+  const first = await count();
+  expect(first.n).toBeGreaterThan(0);
+  expect(first.n).toBe(api.calls.filter(u => u.includes('fipe.parallelum.com.br')).length);
+  await page.reload();
+  await expect(lotCard(page, 1)).toContainText('Lucro Estimado');
+  expect((await count()).n).toBe(first.n);
+  await popup.fill('#fipeToken', 'abc');
+  await popup.click('button[type="submit"]');
+  await expect(popup.locator('#quotaText')).toContainText('de 1000');
+});
+
+test('picker explains when to enter IPVA', async () => {
+  const page = await open();
+  await lotCard(page, 0).locator('.fipe-manual-btn').click();
+  await expect(page.locator('.fipe-modal .fipe-hint')).toContainText('edital');
 });
 
 // 11 ─ non-matching pages are left alone

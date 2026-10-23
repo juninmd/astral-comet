@@ -3,6 +3,9 @@ import { CalculationResult } from './types';
 import { calculate, CURRENCY_PATTERN, extractCurrency, PageFees, parseCurrency, parseDescription } from './lib';
 import { getAutoLookupEnabled, getSettings, getToken, setStored, AUTO_LOOKUP_KEY } from './settings';
 import { categoryOf, Selection, showVehiclePicker } from './vehicle_picker';
+import { LotStore } from './lot_store';
+import { LotNotes, mountLotNotes } from './lot_notes';
+import { detectRisks, Risk } from './risks';
 
 const VEHICLE_DESCRIPTION_PATTERN = /(?:[^/\s,]+\/)?[^/,]+\/[^,]+,\s*\d{2}\/\d{2}/i;
 const DETAIL_PANEL_ID = 'fipe-detail-helper';
@@ -74,6 +77,19 @@ function pageText(element: Element): string {
   const clone = element.cloneNode(true) as Element;
   clone.querySelectorAll(OWN_UI).forEach(node => node.remove());
   return getTextContent(clone);
+}
+
+/** The lot's visible text as one block per text node, without our own panel, for the red-flag scan. */
+function textBlocks(scope: Element): string[] {
+  const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
+    acceptNode: node => node.parentElement?.closest(`${OWN_UI}, script, style, noscript`) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  });
+  const blocks: string[] = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node.textContent?.replace(/\s+/g, ' ').trim();
+    if (text) blocks.push(text);
+  }
+  return blocks;
 }
 
 function findElementsByText(root: ParentNode, pattern: RegExp): HTMLElement[] {
@@ -209,11 +225,14 @@ function escapeHtml(text: string): string {
 
 interface LotContext {
   root: ParentNode;
+  /** The element holding just this lot's text (a card, or the detail column), scanned for red flags. */
+  scope: Element;
   description: string;
   bidText: string;
 }
 
 const contexts = new WeakMap<HTMLElement, LotContext>();
+const notes = new WeakMap<HTMLElement, LotNotes>();
 // Vehicle picked manually for a lot; survives re-renders until the lot's description changes.
 const overrides = new WeakMap<HTMLElement, Selection>();
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -226,8 +245,17 @@ function stat(label: string, value: string): string {
   return `<div class="fipe-stat"><span class="fipe-label">${label}</span><span class="fipe-value">${value}</span></div>`;
 }
 
+const percent = (fraction: number) => Number((fraction * 100).toFixed(2)).toLocaleString('pt-BR');
+
+function risksBlock(risks: Risk[]): string {
+  if (risks.length === 0) return '';
+  const chips = risks.map(r => `<li class="fipe-risk ${r.level}">${escapeHtml(r.label)}</li>`).join('');
+  return `<div class="fipe-risks-wrap"><ul class="fipe-risks" aria-label="Alertas do lote">${chips}</ul><span class="fipe-maxbid-note">Palavras de risco no texto do lote. Confira no edital.</span></div>`;
+}
+
 function maxBidBlock(r: CalculationResult): string {
-  const title = '<span class="fipe-label">Lance máximo (sem prejuízo)</span>';
+  const goal = r.targetMargin > 0 ? `lucro de ${percent(r.targetMargin)}%` : 'sem prejuízo';
+  const title = `<span class="fipe-label">Lance máximo (${goal})</span>`;
   if (r.maxBid <= 0) {
     return `<div class="fipe-maxbid negative">${title}<span class="fipe-value">Inviável</span><span class="fipe-maxbid-note">Os custos fixos superam a FIPE</span></div>`;
   }
@@ -236,15 +264,17 @@ function maxBidBlock(r: CalculationResult): string {
   return `<div class="fipe-maxbid${gap < 0 ? ' negative' : ''}">${title}<span class="fipe-value">${brl.format(r.maxBid)}</span><span class="fipe-maxbid-note">${note}</span></div>`;
 }
 
-function updateResults(container: HTMLElement, results: CalculationResult, fipe: { value: number; model: string; reference: string } | null) {
+function updateResults(container: HTMLElement, results: CalculationResult, fipe: { value: number; model: string; reference: string } | null, risks: Risk[] = []) {
   const resultsEl = getResultsContainer(container);
-  const pct = Number((results.commissionRate * 100).toFixed(2)).toLocaleString('pt-BR');
+  const pct = percent(results.commissionRate);
   const wasOpen = container.dataset.detailsOpen === 'true';
+  const discounted = results.fipeValue > 0 && results.resaleValue !== results.fipeValue;
 
   const breakdown = `
     <details class="fipe-details"${wasOpen ? ' open' : ''}>
       <summary>Detalhamento dos custos</summary>
       ${[
+        discounted ? row(`Revenda estimada (FIPE −${percent(1 - results.resaleValue / results.fipeValue)}%):`, brl.format(results.resaleValue)) : '',
         row('Lance (Maior/Inicial):', brl.format(results.bidValue)),
         row(`Comissão Leiloeiro (${pct}%):`, brl.format(results.commission)),
         row('Despesas Adm/Org/Dep:', brl.format(results.adminFee)),
@@ -254,11 +284,12 @@ function updateResults(container: HTMLElement, results: CalculationResult, fipe:
         row('Guincho (Est.):', brl.format(results.towing)),
         results.ipvaFee > 0 ? row('IPVA (não pago):', brl.format(results.ipvaFee)) : '',
       ].join('')}
+      ${results.ipvaFee > 0 ? '<p class="fipe-maxbid-note">IPVA somado por você. Confira no edital se é do comprador: a regra de débitos muda de leilão para leilão.</p>' : ''}
     </details>`;
 
   if (!fipe) {
     container.style.borderLeftColor = '';
-    resultsEl.innerHTML = `<div class="fipe-stats">${stat('Lance', brl.format(results.bidValue))}${stat('Custo Total', brl.format(results.totalCost))}</div>${breakdown}`;
+    resultsEl.innerHTML = `${risksBlock(risks)}<div class="fipe-stats">${stat('Lance', brl.format(results.bidValue))}${stat('Custo Total', brl.format(results.totalCost))}</div>${breakdown}`;
     return;
   }
 
@@ -266,6 +297,7 @@ function updateResults(container: HTMLElement, results: CalculationResult, fipe:
   const tone = isPositive ? '' : ' negative';
   container.style.borderLeftColor = isPositive ? COLOR_GOOD : COLOR_BAD;
   resultsEl.innerHTML = `
+    ${risksBlock(risks)}
     <div class="fipe-hero${tone}">
       <span class="fipe-label">Lucro Estimado</span>
       <div class="fipe-profit${tone}">
@@ -306,6 +338,8 @@ async function renderEvaluation(container: HTMLElement, ctx: LotContext, overrid
   const bidValue = parseCurrency(ctx.bidText);
   const [settings, token] = await Promise.all([getSettings(), getToken()]);
   const costs = calculate(0, bidValue, settings, extractFeesFromPage(ctx.root));
+  const risks = detectRisks(textBlocks(ctx.scope));
+  notes.get(container)?.setMaxBid(null);
 
   try {
     const fipeData = picked
@@ -315,7 +349,7 @@ async function renderEvaluation(container: HTMLElement, ctx: LotContext, overrid
 
     if (!fipeData) {
       container.dataset.state = 'notfound';
-      updateResults(container, costs, null);
+      updateResults(container, costs, null, risks);
       getResultsContainer(container).insertAdjacentHTML('beforeend',
         `<div class="fipe-alert"><span class="fipe-not-found">FIPE não encontrada para ${escapeHtml(`${parsed!.brand} ${parsed!.model} (${parsed!.modelYear})`)}</span></div>`);
       return;
@@ -323,19 +357,20 @@ async function renderEvaluation(container: HTMLElement, ctx: LotContext, overrid
 
     const fipeValue = parseCurrency(fipeData.price);
     const results = calculate(fipeValue, bidValue, settings, extractFeesFromPage(ctx.root));
-    updateResults(container, results, { value: fipeValue, model: fipeData.model, reference: fipeData.referenceMonth });
+    updateResults(container, results, { value: fipeValue, model: fipeData.model, reference: fipeData.referenceMonth }, risks);
+    notes.get(container)?.setMaxBid(results.maxBid);
     container.dataset.state = 'done';
   } catch (e) {
     if (container.dataset.run !== run) return;
     container.dataset.state = 'error';
-    updateResults(container, costs, null);
+    updateResults(container, costs, null, risks);
     const message = e instanceof FipeError && e.kind === 'rate-limit'
       ? 'Limite da API FIPE excedido. Tente mais tarde ou informe um token no popup.'
       : 'Não foi possível consultar a FIPE. Verifique sua conexão.';
     getResultsContainer(container).insertAdjacentHTML('beforeend',
       `<div class="fipe-alert"><span class="fipe-not-found">${escapeHtml(message)}</span><button type="button" class="fipe-retry">Tentar novamente</button></div>`);
     container.querySelector<HTMLButtonElement>('.fipe-retry')?.addEventListener('click', () => {
-      void renderEvaluation(container, ctx, override);
+      void FipeService.retryNow().then(() => renderEvaluation(container, ctx, override));
     });
   }
 }
@@ -359,7 +394,7 @@ function buildControls(container: HTMLElement) {
 
   // Remember whether the cost breakdown is open: results are rebuilt on every refresh. 'toggle' doesn't bubble.
   container.addEventListener('toggle', (event) => {
-    if (event.target instanceof HTMLDetailsElement) container.dataset.detailsOpen = String(event.target.open);
+    if (event.target instanceof HTMLDetailsElement && event.target.classList.contains('fipe-details')) container.dataset.detailsOpen = String(event.target.open);
   }, true);
 
   const toggleLabel = document.createElement('label');
@@ -454,7 +489,7 @@ async function processLot(card: HTMLElement) {
     card;
 
   const container = ensureContainer(card, insertionTarget as HTMLElement);
-  await renderWithMode(container, { root: card, description, bidText });
+  await renderWithMode(container, { root: card, scope: card, description, bidText });
 }
 
 function isDetailPage(): boolean {
@@ -485,7 +520,13 @@ async function processDetailPage() {
     insertionTarget.prepend(container);
   }
 
-  await renderWithMode(container, { root: document, description, bidText });
+  if (!notes.has(container)) {
+    const store = LotStore.fromChrome();
+    if (store) notes.set(container, mountLotNotes(container, store, window.location.href, description));
+  }
+  // A page-wide host would pull menus and other lots into the red-flag scan; narrow it to the description's own block.
+  const scope = host === document.body || host.tagName === 'MAIN' ? (descriptionElement.parentElement ?? host) : host;
+  await renderWithMode(container, { root: document, scope, description, bidText });
 }
 
 let scanTimer: number | null = null;

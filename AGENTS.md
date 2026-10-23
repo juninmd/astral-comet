@@ -1,27 +1,39 @@
 # AGENTS.md - Astral Comet
 
+Extensão Chrome/Firefox (MV3) que mostra FIPE e lucro estimado nos lotes do Freitas Leiloeiro.
+
 ## Tech Stack
-- **Runtime:** Chrome/Firefox Extension
-- **Language:** TypeScript
-- **Bundler:** tsup
-- **Dev Server:** web-ext (Firefox)
-- **APIs:** Chrome Extensions API, BrasilAPI (FIPE)
+- **Linguagem:** TypeScript (strict), bundler **tsup** (IIFE), gerenciador **pnpm**
+- **Testes:** vitest (unit) + Playwright (e2e com a extensão carregada em Chromium)
+- **Dev Firefox:** web-ext
+- **APIs:** BrasilAPI (marcas/modelos) + FIPE API v2 `fipe.parallelum.com.br` (anos/preço)
 
 ## Structure
 ```
-src/             # TypeScript source
-dist/            # Built output
-manifest.json    # Extension manifest (Chrome + Firefox)
-tsup.config.ts   # Bundler config
+src/content_script.ts   # injeta o card nas páginas; MutationObserver, modo manual, erros
+src/fipe_service.ts     # consulta FIPE: marca → modelo (ranking) → ano → preço; cache + FipeError
+src/lib.ts              # funções puras: parseCurrency, parseDescription, calculate
+src/settings.ts         # defaults e acesso ao chrome.storage.sync
+src/popup.{html,ts}     # configurações de custos e token FIPE
+src/styles.css          # CSS injetado
+tests/                  # vitest (lib, fipe_service, live opcional)
+e2e/                    # Playwright: fixtures (páginas do leilão + mock das APIs) e specs
+docs/screenshots/       # prints gerados pelo e2e (usados no README)
+manifest.json           # MV3, Chrome + Firefox (gecko id)
 ```
 
 ## Commands
-- `pnpm install` - Install deps
-- `pnpm build` - Build with tsup
-- `pnpm dev` - Firefox dev with web-ext
-- `pnpm watch` - Watch mode
+- `pnpm install` / `pnpm build` / `pnpm watch`
+- `pnpm typecheck` · `pnpm test` · `pnpm test:e2e` · `pnpm lint:ext`
+- `LIVE=1 pnpm test` / `LIVE=1 pnpm test:e2e` → incluem chamadas às APIs reais
+- `pnpm dev` → Firefox via web-ext
 
 ## Conventions
-- TypeScript strict mode
-- Cross-browser manifest (Chrome/Firefox compatible)
-- CSS injection for UI overlay on target pages
+- TypeScript strict; manifest compatível Chrome/Firefox; UI injetada via CSS próprio (`.fipe-*`).
+- Lógica pura vai em `lib.ts` com teste unitário; comportamento de DOM vai coberto no e2e.
+- `commissionRate` é guardado em **%** no storage (popup) e convertido para fração em `settings.ts`; a comissão lida da página já é fração.
+- A resposta real da BrasilAPI usa `{ modelo, valor }` nos modelos e `{ nome, valor }` nas marcas; a FIPE v2 usa `{ code, name }` e `price`. Não presumir outros nomes.
+- Mutações do próprio DOM da extensão (`.fipe-helper-container`, `.fipe-modal-overlay`) são ignoradas pelo observer — mantenha assim para evitar loop de renderização.
+- Rodar e2e: Chromium em `/opt/pw-browsers` (ou `CHROME_PATH`); não rodar `playwright install`.
+- O site do leilão retorna 403 para automação: use as fixtures de `e2e/fixtures.ts`, nunca scraping real.
+- Texto de UI em português (pt-BR).

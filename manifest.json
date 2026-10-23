@@ -3,31 +3,45 @@
   "name": "Leilão FIPE Helper",
   "version": "1.0.0",
   "description": "Exibe o valor FIPE e lucro calculado no site Freitas Leiloeiro.",
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
     "https://www.freitasleiloeiro.com.br/*",
-    "https://parallelum.com.br/*",
+    "https://freitasleiloeiro.com.br/*",
+    "https://fipe.parallelum.com.br/*",
     "https://brasilapi.com.br/*"
   ],
   "content_scripts": [
     {
       "matches": [
-        "https://www.freitasleiloeiro.com.br/Leiloes/Lotes*",
-        "https://www.freitasleiloeiro.com.br/leiloes/lotes*",
-        "https://www.freitasleiloeiro.com.br/Leiloes/LoteDetalhes*",
-        "https://www.freitasleiloeiro.com.br/leiloes/lotedetalhes*",
         "https://www.freitasleiloeiro.com.br/Leiloes/*",
         "https://www.freitasleiloeiro.com.br/leiloes/*",
         "https://freitasleiloeiro.com.br/Leiloes/*",
         "https://freitasleiloeiro.com.br/leiloes/*"
       ],
-      "js": ["dist/content_script.global.js"],
-      "css": ["dist/styles.css"],
+      "js": [
+        "dist/content_script.global.js"
+      ],
+      "css": [
+        "dist/styles.css"
+      ],
       "run_at": "document_idle"
     }
   ],
   "action": {
     "default_popup": "dist/popup.html",
     "default_title": "Configurações"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "astral-comet@juninmd.github.io",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
   }
 }

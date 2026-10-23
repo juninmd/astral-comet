@@ -1,21 +1,28 @@
 {
   "name": "astral-comet",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Extensão Chrome/Firefox que mostra FIPE e lucro estimado nos lotes da Freitas Leiloeiro",
+  "main": "dist/content_script.global.js",
   "scripts": {
     "build": "tsup",
     "watch": "tsup --watch",
-    "dev": "web-ext run --source-dir . --firefox-profile dev"
+    "dev": "web-ext run --source-dir . --firefox-profile dev",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "pnpm build && playwright test",
+    "lint:ext": "web-ext lint"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.32.1",
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/chrome": "^0.2.2",
+    "playwright": "^1.64.1",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
+    "vitest": "^5.0.5",
     "web-ext": "^10.4.0"
   }
 }
